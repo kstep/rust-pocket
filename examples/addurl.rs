@@ -14,5 +14,5 @@ fn main() {
     println!("access token: {:?}", pocket.access_token());
 
     let item = pocket.add("http://example.com").unwrap();
-    //debug!("item: {}", item);
+    println!("item: {:?}", item);
 }

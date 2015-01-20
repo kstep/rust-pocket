@@ -17,6 +17,7 @@ use mime::Mime;
 use rustc_serialize::json;
 use std::error::{FromError, Error};
 use std::io::IoError;
+use std::collections::BTreeMap;
 
 #[derive(Show)]
 pub enum PocketError {
@@ -132,6 +133,79 @@ struct PocketAuthorizeResponse {
     username: String
 }
 
+#[derive(RustcEncodable)]
+struct PocketAddUrlRequest<'a> {
+    consumer_key: &'a str,
+    access_token: &'a str,
+    url: &'a str,
+    title: Option<&'a str>,
+    tags: Option<&'a str>,
+    tweet_id: Option<&'a str>
+}
+
+
+#[derive(RustcDecodable, Show, PartialEq)]
+pub struct ItemImage {
+    pub caption: String,
+    pub credit: String,
+    pub height: u16, // String
+    pub width: u16, // String
+    pub image_id: u32, // String
+    pub item_id: u32, // String
+    pub src: String, // must be Url
+}
+
+#[derive(RustcDecodable, Show, PartialEq)]
+pub struct ItemVideo {
+    pub height: u16, // String
+    pub width: u16, // String
+    pub item_id: u32, // String
+    pub length: u16, // String
+    pub src: String, // must be Url
+    //pub type: u16, // String
+    pub vid: String,
+    pub video_id: u32, // String
+}
+
+#[derive(RustcDecodable, Show, PartialEq)]
+pub struct PocketItem {
+    //pub authors: Vec<ItemAuthor>, // ???
+    pub content_length: u32, // String
+    pub date_published: String, // must be Tm or Timespec
+    pub date_resolved: String, // must be Tm or Timespec
+    pub domain_id: u32, // String
+    pub encoding: String,
+    pub excerpt: String,
+    pub extended_item_id: u32, // String
+    pub given_url: String, // must be Url?
+    pub has_image: u8, // String, must be bool
+    pub has_video: u8, // String, must be bool
+    pub innerdomain_redirect: u8, // String, must be bool
+    pub is_article: u8, // String, must be bool
+    pub is_index: u8, // String, must be bool
+    pub item_id: u32, // String
+    pub lang: String,
+    pub login_required: u8, // String, must be bool
+    pub mime_type: String, // must be Option<Mime>
+    pub normal_url: String, // must be Url
+    pub origin_domain_id: u32, // String
+    pub resolved_id: u32, // String
+    pub resolved_normal_url: String, // must be Url
+    pub resolved_url: String, // must be Url
+    pub response_code: u16,
+    pub title: String,
+    pub used_fallback: u8, // String must be bool
+    pub word_count: u32, // String
+    pub videos: BTreeMap<usize, ItemVideo>, // must be Vec
+    pub images: BTreeMap<usize, ItemImage>, // must be Vec
+}
+
+#[derive(RustcDecodable)]
+struct PocketAddUrlResponse {
+    item: PocketItem,
+    status: u16
+}
+
 impl<'a> Pocket<'a> {
     pub fn new(consumer_key: &str, access_token: Option<&str>) -> Pocket<'a> {
         Pocket {
@@ -142,7 +216,7 @@ impl<'a> Pocket<'a> {
         }
     }
 
-    pub fn access_token(&self) -> Option<&str> {
+    #[inline] pub fn access_token(&self) -> Option<&str> {
         self.access_token.as_ref().map(|v| &**v)
     }
 
@@ -189,7 +263,23 @@ impl<'a> Pocket<'a> {
         }
     }
 
-    pub fn add(&mut self, url: &str) -> PocketResult<()> {
-        Ok(())
+    pub fn add(&mut self, url: &str) -> PocketResult<PocketItem> {
+        let app_json: Mime = "application/json".parse().unwrap();
+
+        self.client.post("https://getpocket.com/v3/add")
+            .header(XAccept(app_json.clone()))
+            .header(ContentType(app_json.clone()))
+            .body(&*json::encode(&PocketAddUrlRequest {
+                consumer_key: &*self.consumer_key,
+                access_token: &**self.access_token.as_ref().unwrap(),
+                url: url,
+                title: None,
+                tags: None,
+                tweet_id: None
+            }))
+            .send().map_err(FromError::from_error)
+            .and_then(|mut r| r.read_to_string().map_err(FromError::from_error))
+            .and_then(|s| json::decode::<PocketAddUrlResponse>(&*s).map_err(FromError::from_error))
+            .map(|v| v.item)
     }
 }
