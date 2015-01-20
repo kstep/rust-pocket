@@ -3,6 +3,10 @@
 name = "pocket"
 version = "0.0.1"
 authors = ["Konstantin Stepanov <me@kstep.me>"]
+description = "Simple bindings for Pocket API (https://getpocket.com)"
+homepage = "https://github.com/kstep/rust-pocket"
+repository = "https://github.com/kstep/rust-pocket.git"
+license = "MIT"
 
 [dependencies]
 hyper = "*"
