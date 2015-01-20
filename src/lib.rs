@@ -17,7 +17,6 @@ use mime::Mime;
 use rustc_serialize::json;
 use std::error::{FromError, Error};
 use std::io::IoError;
-use std::collections::BTreeMap;
 
 #[derive(Show)]
 pub enum PocketError {
@@ -169,7 +168,6 @@ pub struct ItemVideo {
 
 #[derive(RustcDecodable, Show, PartialEq)]
 pub struct PocketItem {
-    //pub authors: Vec<ItemAuthor>, // ???
     pub content_length: u32, // String
     pub date_published: String, // must be Tm or Timespec
     pub date_resolved: String, // must be Tm or Timespec
@@ -196,8 +194,9 @@ pub struct PocketItem {
     pub title: String,
     pub used_fallback: u8, // String must be bool
     pub word_count: u32, // String
-    pub videos: BTreeMap<usize, ItemVideo>, // must be Vec
-    pub images: BTreeMap<usize, ItemImage>, // must be Vec
+    //pub authors: Vec<ItemAuthor>, // ???
+    //pub videos: Vec<ItemVideo>, // encoded as object with integer indices
+    //pub images: Vec<ItemImage>, // if present, as empty array otherwise
 }
 
 #[derive(RustcDecodable)]
