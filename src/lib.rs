@@ -116,7 +116,8 @@ struct PocketOAuthRequest<'a> {
 
 #[derive(RustcDecodable)]
 struct PocketOAuthResponse {
-    code: String
+    code: String,
+    state: Option<String>
 }
 
 #[derive(RustcEncodable)]
@@ -132,13 +133,17 @@ struct PocketAuthorizeResponse {
 }
 
 impl<'a> Pocket<'a> {
-    pub fn new(consumer_key: &str) -> Pocket<'a> {
+    pub fn new(consumer_key: &str, access_token: Option<&str>) -> Pocket<'a> {
         Pocket {
             consumer_key: consumer_key.to_string(),
-            access_token: None,
+            access_token: access_token.map(|v| v.to_string()),
             code: None,
             client: Client::new()
         }
+    }
+
+    pub fn access_token(&self) -> Option<&str> {
+        self.access_token.as_ref().map(|v| &**v)
     }
 
     pub fn get_auth_url(&mut self) -> PocketResult<Url> {
@@ -156,7 +161,7 @@ impl<'a> Pocket<'a> {
             .and_then(|s| json::decode::<PocketOAuthResponse>(&*s).map_err(FromError::from_error))
             .and_then(|&mut: r| {
                 let mut url = Url::parse("https://getpocket.com/auth/authorize").unwrap();
-                url.set_query_from_pairs(vec![("code", &*r.code), ("redirect_uri", "rustapi:finishauth")].into_iter());
+                url.set_query_from_pairs(vec![("request_token", &*r.code), ("redirect_uri", "rustapi:finishauth")].into_iter());
                 self.code = Some(r.code);
                 Ok(url)
             })
@@ -186,22 +191,5 @@ impl<'a> Pocket<'a> {
 
     pub fn add(&mut self, url: &str) -> PocketResult<()> {
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    use super::Pocket;
-
-    #[test]
-    fn test_pocket_add() {
-        let mut pocket = Pocket::new(&*option_env!("POCKET_CONSUMER_KEY").unwrap());
-        let url = pocket.get_auth_url().unwrap();
-        debug!("Follow auth URL to provide access: {}", url);
-        pocket.authorize().unwrap();
-
-        let item = pocket.add("http://example.com").unwrap();
-        //debug!("item: {}", item);
     }
 }
