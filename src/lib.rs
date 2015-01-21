@@ -21,7 +21,8 @@ use std::io::IoError;
 #[derive(Show)]
 pub enum PocketError {
     Http(HttpError),
-    Json(json::DecoderError)
+    Json(json::DecoderError),
+    Proto(u16, String)
 }
 
 pub type PocketResult<T> = Result<T, PocketError>;
@@ -49,6 +50,7 @@ impl Error for PocketError {
         match *self {
             PocketError::Http(ref e) => e.description(),
             PocketError::Json(ref e) => e.description(),
+            PocketError::Proto(..) => "protocol error"
         }
     }
 
@@ -56,13 +58,15 @@ impl Error for PocketError {
         match *self {
             PocketError::Http(ref e) => e.detail(),
             PocketError::Json(ref e) => e.detail(),
+            PocketError::Proto(ref code, ref msg) => format!("{} (code {})", msg, code)
         }
     }
 
     fn cause(&self) -> Option<&Error> {
         match *self {
             PocketError::Http(ref e) => Some(e),
-            PocketError::Json(ref e) => Some(e)
+            PocketError::Json(ref e) => Some(e),
+            PocketError::Proto(..) => None
         }
     }
 }
@@ -97,6 +101,45 @@ impl Header for XAccept {
 impl HeaderFormat for XAccept {
     fn fmt_header(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         std::fmt::String::fmt(&self.0, fmt)
+    }
+}
+
+#[derive(Clone)]
+struct XError(String);
+#[derive(Clone)]
+struct XErrorCode(u16);
+
+impl Header for XError {
+    #[allow(unused_variables)]
+    fn header_name(marker: Option<Self>) -> &'static str {
+        "X-Error"
+    }
+
+    fn parse_header(raw: &[Vec<u8>]) -> Option<XError> {
+        from_one_raw_str(raw).map(|error| XError(error))
+    }
+}
+
+impl HeaderFormat for XError {
+    fn fmt_header(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.0.fmt(fmt)
+    }
+}
+
+impl Header for XErrorCode {
+    #[allow(unused_variables)]
+    fn header_name(marker: Option<Self>) -> &'static str {
+        "X-Error"
+    }
+
+    fn parse_header(raw: &[Vec<u8>]) -> Option<XErrorCode> {
+        from_one_raw_str(raw).map(|code| XErrorCode(code))
+    }
+}
+
+impl HeaderFormat for XErrorCode {
+    fn fmt_header(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.0.fmt(fmt)
     }
 }
 
@@ -226,7 +269,15 @@ impl<'a> Pocket<'a> {
             .header(ContentType(app_json.clone()))
             .body(data)
             .send().map_err(FromError::from_error)
-            .and_then(|mut r| r.read_to_string().map_err(FromError::from_error))
+            .and_then(|mut r| {
+                match (r.headers.get::<XErrorCode>(), r.headers.get::<XError>()) {
+                    (Some(XErrorCode(code)), Some(XError(error))) => Err(PocketError::Proto(code, error)),
+                    (None, None) => r.read_to_string().map_err(FromError::from_error),
+
+                    (Some(XErrorCode(code)), None) => Err(PocketError::Proto(code, "unknown protocol error".to_string())),
+                    (None, Some(XError(error))) => Err(PocketError::Proto(0, error)),
+                }
+            })
             .and_then(|s| json::decode::<Resp>(&*s).map_err(FromError::from_error))
     }
 
