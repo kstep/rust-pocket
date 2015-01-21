@@ -17,6 +17,7 @@ use mime::Mime;
 use rustc_serialize::{json, Decodable, Encodable};
 use std::error::{FromError, Error};
 use std::io::IoError;
+use std::collections::BTreeMap;
 
 #[derive(Show)]
 pub enum PocketError {
@@ -58,7 +59,7 @@ impl Error for PocketError {
         match *self {
             PocketError::Http(ref e) => e.detail(),
             PocketError::Json(ref e) => e.detail(),
-            PocketError::Proto(ref code, ref msg) => format!("{} (code {})", msg, code)
+            PocketError::Proto(ref code, ref msg) => Some(format!("{} (code {})", msg, code))
         }
     }
 
@@ -122,14 +123,14 @@ impl Header for XError {
 
 impl HeaderFormat for XError {
     fn fmt_header(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.0.fmt(fmt)
+        std::fmt::String::fmt(&self.0, fmt)
     }
 }
 
 impl Header for XErrorCode {
     #[allow(unused_variables)]
     fn header_name(marker: Option<Self>) -> &'static str {
-        "X-Error"
+        "X-Error-Code"
     }
 
     fn parse_header(raw: &[Vec<u8>]) -> Option<XErrorCode> {
@@ -139,7 +140,7 @@ impl Header for XErrorCode {
 
 impl HeaderFormat for XErrorCode {
     fn fmt_header(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.0.fmt(fmt)
+        std::fmt::String::fmt(&self.0, fmt)
     }
 }
 
@@ -176,7 +177,7 @@ struct PocketAuthorizeResponse {
 }
 
 #[derive(RustcEncodable)]
-struct PocketAddUrlRequest<'a> {
+struct PocketAddRequest<'a> {
     consumer_key: &'a str,
     access_token: &'a str,
     url: &'a str,
@@ -192,8 +193,8 @@ pub struct ItemImage {
     pub credit: String,
     pub height: u16, // String
     pub width: u16, // String
-    pub image_id: u32, // String
-    pub item_id: u32, // String
+    pub image_id: u64, // String
+    pub item_id: u64, // String
     pub src: String, // must be Url
 }
 
@@ -201,30 +202,30 @@ pub struct ItemImage {
 pub struct ItemVideo {
     pub height: u16, // String
     pub width: u16, // String
-    pub item_id: u32, // String
-    pub length: u16, // String
+    pub item_id: u64, // String
+    pub length: usize, // String
     pub src: String, // must be Url
     //pub type: u16, // String
     pub vid: String,
-    pub video_id: u32, // String
+    pub video_id: u64, // String
 }
 
 #[derive(RustcDecodable, Show, PartialEq)]
-pub struct PocketItem {
-    pub content_length: u32, // String
+pub struct PocketAddedItem {
+    pub content_length: usize, // String
     pub date_published: String, // must be Tm or Timespec
     pub date_resolved: String, // must be Tm or Timespec
     pub domain_id: u32, // String
     pub encoding: String,
     pub excerpt: String,
-    pub extended_item_id: u32, // String
+    pub extended_item_id: u64, // String
     pub given_url: String, // must be Url?
-    pub has_image: u8, // String, must be bool
-    pub has_video: u8, // String, must be bool
+    pub has_image: u8, // String, must be enum PocketItemHas { DontHas = 0, Has = 1, Is = 2 }
+    pub has_video: u8, // String, must be enum PocketItemHas
     pub innerdomain_redirect: u8, // String, must be bool
     pub is_article: u8, // String, must be bool
     pub is_index: u8, // String, must be bool
-    pub item_id: u32, // String
+    pub item_id: u64, // String
     pub lang: String,
     pub login_required: u8, // String, must be bool
     pub mime_type: String, // must be Option<Mime>
@@ -237,15 +238,70 @@ pub struct PocketItem {
     pub title: String,
     pub used_fallback: u8, // String must be bool
     pub word_count: u32, // String
+    //pub favorite: u8, // String must be bool
+    //pub status: u8, // String must be enum PocketItemStatus { Normal = 0, Archived = 1, Deleted = 2 }
+    //pub tags: Vec<ItemTag>, // ???
     //pub authors: Vec<ItemAuthor>, // ???
     //pub videos: Vec<ItemVideo>, // encoded as object with integer indices
     //pub images: Vec<ItemImage>, // if present, as empty array otherwise
 }
 
 #[derive(RustcDecodable)]
-struct PocketAddUrlResponse {
-    item: PocketItem,
+struct PocketAddResponse {
+    item: PocketAddedItem,
     status: u16
+}
+
+#[derive(RustcEncodable)]
+#[allow(non_snake_case)]
+struct PocketGetRequest<'a> {
+    consumer_key: &'a str,
+    access_token: &'a str,
+    state: Option<&'a str>, // must be enum PocketItemState { unread, archive, all }
+    favorite: Option<u8>,  // must be bool
+    tag: Option<&'a str>,   // should be enum PocketTag { Untagged, Tagged(String) }
+    contentType: Option<&'a str>, // must be enum PocketItemType { article, video, image }
+    sort: Option<&'a str>, // must be enum PocketSort { newest, oldest, title, site }
+    detailType: Option<&'a str>, // must be enum PocketDetailType { simple, complete } or just a bool
+    search: Option<&'a str>,
+    domain: Option<&'a str>,
+    since: Option<u64>, // must be Timespec or Tm
+    count: Option<usize>,
+    offset: Option<usize>
+}
+
+#[derive(RustcDecodable)]
+struct PocketGetResponse {
+    list: BTreeMap<String, PocketItem>, // must be Vec
+    status: u16,
+    complete: u8, // must be bool
+    error: Option<String>,
+    //search_meta: PocketSearchMeta,
+    since: u64, // must be Timespec or Tm
+}
+
+// See also PocketAddedItem
+#[derive(RustcDecodable, Show, PartialEq)]
+pub struct PocketItem {
+    pub excerpt: String,
+    pub favorite: u8, // bool
+    pub given_title: String,
+    pub given_url: String, // Url
+    pub has_image: u8, // enum PocketItemHas
+    pub has_video: u8,
+    pub is_article: u8, // bool
+    pub is_index: u8, // bool
+    pub item_id: u64,
+    pub resolved_id: u64,
+    pub resolved_title: String,
+    pub resolved_url: String, // Url
+    pub sort_id: usize,
+    pub status: u8, // enum PocketItemStatus
+    pub time_added: u64, // Tm/Timespec
+    pub time_favorited: u64, // Tm/Timespec
+    pub time_read: u64, // Tm/Timespec
+    pub time_updated: u64, // Tm/Timespec
+    pub word_count: u32,
 }
 
 impl<'a> Pocket<'a> {
@@ -269,14 +325,9 @@ impl<'a> Pocket<'a> {
             .header(ContentType(app_json.clone()))
             .body(data)
             .send().map_err(FromError::from_error)
-            .and_then(|mut r| {
-                match (r.headers.get::<XErrorCode>(), r.headers.get::<XError>()) {
-                    (Some(XErrorCode(code)), Some(XError(error))) => Err(PocketError::Proto(code, error)),
-                    (None, None) => r.read_to_string().map_err(FromError::from_error),
-
-                    (Some(XErrorCode(code)), None) => Err(PocketError::Proto(code, "unknown protocol error".to_string())),
-                    (None, Some(XError(error))) => Err(PocketError::Proto(0, error)),
-                }
+            .and_then(|mut r| match r.headers.get::<XErrorCode>().map(|v| v.0) {
+                None => r.read_to_string().map_err(FromError::from_error),
+                Some(code) => Err(PocketError::Proto(code, r.headers.get::<XError>().map(|v| &*v.0).unwrap_or("unknown protocol error").to_string())),
             })
             .and_then(|s| json::decode::<Resp>(&*s).map_err(FromError::from_error))
     }
@@ -313,8 +364,8 @@ impl<'a> Pocket<'a> {
         }
     }
 
-    pub fn add(&mut self, url: &str) -> PocketResult<PocketItem> {
-        let request = json::encode(&PocketAddUrlRequest {
+    pub fn add(&mut self, url: &str) -> PocketResult<PocketAddedItem> {
+        let request = json::encode(&PocketAddRequest {
             consumer_key: &*self.consumer_key,
             access_token: &**self.access_token.as_ref().unwrap(),
             url: url,
@@ -324,6 +375,27 @@ impl<'a> Pocket<'a> {
         });
 
         self.request("https://getpocket.com/v3/add", &*request)
-            .map(|v: PocketAddUrlResponse| v.item)
+            .map(|v: PocketAddResponse| v.item)
+    }
+
+    pub fn get(&mut self) -> PocketResult<Vec<PocketItem>> {
+        let request = json::encode(&PocketGetRequest {
+            consumer_key: &*self.consumer_key,
+            access_token: &**self.access_token.as_ref().unwrap(),
+            state: None,
+            favorite: None,
+            tag: None,
+            contentType: None,
+            sort: None,
+            detailType: None,
+            search: None,
+            domain: None,
+            since: None,
+            count: None,
+            offset: None
+        });
+
+        self.request("https://getpocket.com/v3/get", &*request)
+            .map(|v: PocketGetResponse| v.list.into_iter().map(|(_, v)| v).collect())
     }
 }
