@@ -14,7 +14,7 @@ use hyper::HttpError;
 use hyper::header::shared::util::from_one_raw_str;
 use url::Url;
 use mime::Mime;
-use rustc_serialize::json;
+use rustc_serialize::{json, Decodable, Encodable};
 use std::error::{FromError, Error};
 use std::io::IoError;
 
@@ -219,20 +219,26 @@ impl<'a> Pocket<'a> {
         self.access_token.as_ref().map(|v| &**v)
     }
 
-    pub fn get_auth_url(&mut self) -> PocketResult<Url> {
+    fn request<Resp: Decodable>(&mut self, url: &str, data: &str) -> PocketResult<Resp> {
         let app_json: Mime = "application/json".parse().unwrap();
-        self.client.post("https://getpocket.com/v3/oauth/request")
+        self.client.post(url)
             .header(XAccept(app_json.clone()))
             .header(ContentType(app_json.clone()))
-            .body(&*json::encode(&PocketOAuthRequest {
-                consumer_key: &*self.consumer_key,
-                redirect_uri: "rustapi:finishauth",
-                state: None
-            }))
+            .body(data)
             .send().map_err(FromError::from_error)
             .and_then(|mut r| r.read_to_string().map_err(FromError::from_error))
-            .and_then(|s| json::decode::<PocketOAuthResponse>(&*s).map_err(FromError::from_error))
-            .and_then(|&mut: r| {
+            .and_then(|s| json::decode::<Resp>(&*s).map_err(FromError::from_error))
+    }
+
+    pub fn get_auth_url(&mut self) -> PocketResult<Url> {
+        let request = json::encode(&PocketOAuthRequest {
+            consumer_key: &*self.consumer_key,
+            redirect_uri: "rustapi:finishauth",
+            state: None
+        });
+
+        self.request("https://getpocket.com/v3/oauth/request", &*request)
+            .and_then(|&mut: r: PocketOAuthResponse| {
                 let mut url = Url::parse("https://getpocket.com/auth/authorize").unwrap();
                 url.set_query_from_pairs(vec![("request_token", &*r.code), ("redirect_uri", "rustapi:finishauth")].into_iter());
                 self.code = Some(r.code);
@@ -241,20 +247,14 @@ impl<'a> Pocket<'a> {
     }
 
     pub fn authorize(&mut self) -> PocketResult<String> {
-        let app_json: Mime = "application/json".parse().unwrap();
-        match {
-            self.client.post("https://getpocket.com/v3/oauth/authorize")
-                .header(XAccept(app_json.clone()))
-                .header(ContentType(app_json.clone()))
-                .body(&*json::encode(&PocketAuthorizeRequest {
-                    consumer_key: &*self.consumer_key,
-                    code: self.code.as_ref().map(|v| &**v).unwrap(),
-                }))
-                .send().map_err(FromError::from_error)
-                .and_then(|mut r| r.read_to_string().map_err(FromError::from_error))
-                .and_then(|s| json::decode::<PocketAuthorizeResponse>(&*s).map_err(FromError::from_error))
-        } {
-            Ok(r) => {
+        let request = json::encode(&PocketAuthorizeRequest {
+            consumer_key: &*self.consumer_key,
+            code: self.code.as_ref().map(|v| &**v).unwrap()
+        });
+
+        match self.request("https://getpocket.com/v3/oauth/authorize", &*request)
+        {
+            Ok(r @ PocketAuthorizeResponse {..}) => {
                 self.access_token = Some(r.access_token);
                 Ok(r.username)
             },
@@ -263,22 +263,16 @@ impl<'a> Pocket<'a> {
     }
 
     pub fn add(&mut self, url: &str) -> PocketResult<PocketItem> {
-        let app_json: Mime = "application/json".parse().unwrap();
+        let request = json::encode(&PocketAddUrlRequest {
+            consumer_key: &*self.consumer_key,
+            access_token: &**self.access_token.as_ref().unwrap(),
+            url: url,
+            title: None,
+            tags: None,
+            tweet_id: None
+        });
 
-        self.client.post("https://getpocket.com/v3/add")
-            .header(XAccept(app_json.clone()))
-            .header(ContentType(app_json.clone()))
-            .body(&*json::encode(&PocketAddUrlRequest {
-                consumer_key: &*self.consumer_key,
-                access_token: &**self.access_token.as_ref().unwrap(),
-                url: url,
-                title: None,
-                tags: None,
-                tweet_id: None
-            }))
-            .send().map_err(FromError::from_error)
-            .and_then(|mut r| r.read_to_string().map_err(FromError::from_error))
-            .and_then(|s| json::decode::<PocketAddUrlResponse>(&*s).map_err(FromError::from_error))
-            .map(|v| v.item)
+        self.request("https://getpocket.com/v3/add", &*request)
+            .map(|v: PocketAddUrlResponse| v.item)
     }
 }
