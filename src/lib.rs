@@ -4,11 +4,12 @@ extern crate hyper;
 extern crate "rustc-serialize" as rustc_serialize;
 extern crate url;
 extern crate mime;
+extern crate time;
 
 #[cfg(test)] #[macro_use] extern crate log;
 
 use hyper::header::{Header, HeaderFormat, ContentType};
-use hyper::client::Client;
+use hyper::client::{Client, IntoUrl};
 use hyper::net::HttpConnector;
 use hyper::HttpError;
 use hyper::header::shared::util::from_one_raw_str;
@@ -18,6 +19,7 @@ use rustc_serialize::{json, Decodable, Encodable};
 use std::error::{FromError, Error};
 use std::io::IoError;
 use std::collections::BTreeMap;
+use time::Timespec;
 
 #[derive(Show)]
 pub enum PocketError {
@@ -180,7 +182,7 @@ struct PocketAuthorizeResponse {
 struct PocketAddRequest<'a> {
     consumer_key: &'a str,
     access_token: &'a str,
-    url: &'a str,
+    url: &'a Url,
     title: Option<&'a str>,
     tags: Option<&'a str>,
     tweet_id: Option<&'a str>
@@ -195,7 +197,7 @@ pub struct ItemImage {
     pub width: u16, // String
     pub image_id: u64, // String
     pub item_id: u64, // String
-    pub src: String, // must be Url
+    pub src: Url,
 }
 
 #[derive(RustcDecodable, Show, PartialEq)]
@@ -204,7 +206,7 @@ pub struct ItemVideo {
     pub width: u16, // String
     pub item_id: u64, // String
     pub length: usize, // String
-    pub src: String, // must be Url
+    pub src: Url,
     //pub type: u16, // String
     pub vid: String,
     pub video_id: u64, // String
@@ -219,7 +221,7 @@ pub struct PocketAddedItem {
     pub encoding: String,
     pub excerpt: String,
     pub extended_item_id: u64, // String
-    pub given_url: String, // must be Url?
+    pub given_url: Url,
     pub has_image: u8, // String, must be enum PocketItemHas { DontHas = 0, Has = 1, Is = 2 }
     pub has_video: u8, // String, must be enum PocketItemHas
     pub innerdomain_redirect: u8, // String, must be bool
@@ -229,11 +231,11 @@ pub struct PocketAddedItem {
     pub lang: String,
     pub login_required: u8, // String, must be bool
     pub mime_type: String, // must be Option<Mime>
-    pub normal_url: String, // must be Url
+    pub normal_url: Url,
     pub origin_domain_id: u32, // String
     pub resolved_id: u32, // String
-    pub resolved_normal_url: String, // must be Url
-    pub resolved_url: String, // must be Url
+    pub resolved_normal_url: Url,
+    pub resolved_url: Url,
     pub response_code: u16,
     pub title: String,
     pub used_fallback: u8, // String must be bool
@@ -286,7 +288,7 @@ pub struct PocketItem {
     pub excerpt: String,
     pub favorite: u8, // bool
     pub given_title: String,
-    pub given_url: String, // Url
+    pub given_url: Url,
     pub has_image: u8, // enum PocketItemHas
     pub has_video: u8,
     pub is_article: u8, // bool
@@ -294,7 +296,7 @@ pub struct PocketItem {
     pub item_id: u64,
     pub resolved_id: u64,
     pub resolved_title: String,
-    pub resolved_url: String, // Url
+    pub resolved_url: Url,
     pub sort_id: usize,
     pub status: u8, // enum PocketItemStatus
     pub time_added: u64, // Tm/Timespec
@@ -311,7 +313,7 @@ struct PocketAddAction<'a> {
     tags: Option<&'a str>,
     time: Option<u64>,
     title: Option<&'a str>,
-    url: Option<&'a str>
+    url: Option<&'a Url>
 }
 
 #[derive(RustcEncodable)]
@@ -370,6 +372,23 @@ struct PocketTagRenameAction<'a> {
     old_tag: &'a str,
     new_tag: &'a str,
     time: Option<u64>,
+}
+
+trait PocketAction : Encodable {
+    fn name(marker: Option<Self>) -> &'static str;
+}
+
+#[derive(RustcEncodable)]
+struct PocketSendRequest<'a> {
+    consumer_key: &'a str,
+    access_token: &'a str,
+    //actions: &'a [&'a PocketAction]
+}
+
+#[derive(RustcDecodable)]
+struct PocketSendResponse {
+    status: u16,
+    action_results: Vec<bool>
 }
 
 impl<'a> Pocket<'a> {
@@ -432,11 +451,11 @@ impl<'a> Pocket<'a> {
         }
     }
 
-    pub fn add(&mut self, url: &str) -> PocketResult<PocketAddedItem> {
+    pub fn add<T: IntoUrl>(&mut self, url: T) -> PocketResult<PocketAddedItem> {
         let request = json::encode(&PocketAddRequest {
             consumer_key: &*self.consumer_key,
             access_token: &**self.access_token.as_ref().unwrap(),
-            url: url,
+            url: &url.into_url().unwrap(),
             title: None,
             tags: None,
             tweet_id: None
