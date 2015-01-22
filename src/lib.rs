@@ -304,6 +304,74 @@ pub struct PocketItem {
     pub word_count: u32,
 }
 
+#[derive(RustcEncodable)]
+struct PocketAddAction<'a> {
+    item_id: Option<u64>,
+    ref_id: Option<&'a str>,
+    tags: Option<&'a str>,
+    time: Option<u64>,
+    title: Option<&'a str>,
+    url: Option<&'a str>
+}
+
+#[derive(RustcEncodable)]
+struct PocketArchiveAction {
+    item_id: u64,
+    time: Option<u64>,
+}
+
+#[derive(RustcEncodable)]
+struct PocketReaddAction {
+    item_id: u64,
+    time: Option<u64>,
+}
+
+#[derive(RustcEncodable)]
+struct PocketFavoriteAction {
+    item_id: u64,
+    time: Option<u64>,
+}
+
+#[derive(RustcEncodable)]
+struct PocketUnfavoriteAction {
+    item_id: u64,
+    time: Option<u64>,
+}
+
+#[derive(RustcEncodable)]
+struct PocketDeleteAction {
+    item_id: u64,
+    time: Option<u64>,
+}
+
+#[derive(RustcEncodable)]
+struct PocketTagsAddAction<'a> {
+    item_id: u64,
+    tags: &'a str,
+    time: Option<u64>,
+}
+
+#[derive(RustcEncodable)]
+struct PocketTagsReplaceAction<'a> {
+    item_id: u64,
+    tags: &'a str,
+    time: Option<u64>,
+}
+
+#[derive(RustcEncodable)]
+struct PocketTagsClearAction {
+    item_id: u64,
+    time: Option<u64>,
+}
+
+#[derive(RustcEncodable)]
+struct PocketTagRenameAction<'a> {
+    item_id: u64,
+    old_tag: &'a str,
+    new_tag: &'a str,
+    time: Option<u64>,
+}
+
 impl<'a> Pocket<'a> {
     pub fn new(consumer_key: &str, access_token: Option<&str>) -> Pocket<'a> {
         Pocket {
