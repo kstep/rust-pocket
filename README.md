@@ -37,11 +37,30 @@ let access_token = "YOUR-STORED-ACCESS-TOKEN";
 let mut pocket = Pocket::new("YOUR-CONSUMER-KEY-HERE", Some(access_token));
 ```
 
-Now you have two methods (for now) to get and add new URLs to your pocket:
+Now you have two methods (for now) to get and add new URLs to your pocket.
+
+To add an item, use `Pocket::add()` method:
 
 ```rust
 let added_item = pocket.add("http://example.com").unwrap();
-let items = pocket.get();
+```
+
+To query your pocket, use `Pocket::get()` with `Pocket::filter()` method:
+
+```rust
+// First create a filter
+let filter = pocket.filter()
+    .complete() // complete data
+    .archived() // archived items only
+    .videos()   // videos only
+    .offset(10) // items 10-20
+    .count(10)
+    .sort_by_title(); // sorted by title
+
+// There are other methods, see `PocketGetRequest` struct for details
+
+// Then use the filter to fetch items
+let items = pocket.get(&filter);
 ```
 
 The API bindings will be improved with new methods and parameters. Keep tuned!
