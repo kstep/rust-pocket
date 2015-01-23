@@ -15,4 +15,8 @@ fn main() {
 
     let item = pocket.add("http://example.com").unwrap();
     println!("item: {:?}", item);
+
+    let filter = pocket.filter();
+    let items = pocket.get(&filter.complete());
+    println!("items: {:?}", items);
 }
