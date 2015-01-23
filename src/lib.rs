@@ -207,7 +207,7 @@ pub struct ItemVideo {
     pub src: Url,
     pub width: u16, // String
     pub height: u16, // String
-    pub length: usize, // String
+    pub length: Option<usize>, // String
     pub vid: String,
     pub vtype: u16,
 }
@@ -220,7 +220,7 @@ impl Decodable for ItemVideo {
             src: try!(d.read_struct_field("src", 2, Decodable::decode)),
             width: try!(d.read_struct_field("width", 3, |d| d.read_u16())),
             height: try!(d.read_struct_field("height", 4, |d| d.read_u16())),
-            length: try!(d.read_struct_field("length", 5, |d| d.read_usize())),
+            length: try!(d.read_struct_field("length", 5, |d| d.read_option(|d, b| if b { d.read_usize().map(|v| Some(v)) } else { Ok(None) }))),
             vid: try!(d.read_struct_field("vid", 6, |d| d.read_str())),
             vtype: try!(d.read_struct_field("type", 7, |d| d.read_u16())),
         }))
