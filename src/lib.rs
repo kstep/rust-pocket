@@ -881,18 +881,22 @@ impl<'a> Pocket<'a> {
         }
     }
 
-    pub fn add<T: IntoUrl>(&mut self, url: T) -> PocketResult<PocketAddedItem> {
+    pub fn add<T: IntoUrl>(&mut self, url: T, title: Option<&str>, tags: Option<&str>, tweet_id: Option<&str>) -> PocketResult<PocketAddedItem> {
         let request = json::encode(&PocketAddRequest {
             consumer_key: &*self.consumer_key,
             access_token: &**self.access_token.as_ref().unwrap(),
             url: &url.into_url().unwrap(),
-            title: None,
-            tags: None,
-            tweet_id: None
+            title: title.map(|v| v.clone()),
+            tags: tags.map(|v| v.clone()),
+            tweet_id: tweet_id.map(|v| v.clone())
         });
 
         self.request("https://getpocket.com/v3/add", &*request)
             .map(|v: PocketAddResponse| v.item)
+    }
+
+    #[inline] pub fn push<T: IntoUrl>(&mut self, url: T) -> PocketResult<PocketAddedItem> {
+        self.add(url, None, None, None)
     }
 
     pub fn get(&mut self, filter: &PocketGetRequest) -> PocketResult<Vec<PocketItem>> {

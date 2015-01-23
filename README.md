@@ -39,10 +39,14 @@ let mut pocket = Pocket::new("YOUR-CONSUMER-KEY-HERE", Some(access_token));
 
 Now you have two methods (for now) to get and add new URLs to your pocket.
 
-To add an item, use `Pocket::add()` method:
+To add an item, use `Pocket::add()` or `Pocket::push()` method:
 
 ```rust
-let added_item = pocket.add("http://example.com").unwrap();
+// Quick add by URL only
+let added_item = pocket.push("http://example.com").unwrap();
+
+// Add with all meta-info provided (title, tags, tweet id)
+let added_item = pocket.push("http://example.com", Some("Example title"), Some("example-tag"), Some("example_tweet_id")).unwrap();
 ```
 
 To query your pocket, use `Pocket::get()` with `Pocket::filter()` method:

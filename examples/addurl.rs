@@ -13,7 +13,7 @@ fn main() {
     println!("username: {}", username);
     println!("access token: {:?}", pocket.access_token());
 
-    let item = pocket.add("http://example.com").unwrap();
+    let item = pocket.push("http://example.com").unwrap();
     println!("item: {:?}", item);
 
     let filter = pocket.filter();
