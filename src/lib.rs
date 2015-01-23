@@ -200,7 +200,7 @@ pub struct ItemImage {
     pub credit: String,
 }
 
-#[derive(RustcDecodable, Show, PartialEq)]
+#[derive(Show, PartialEq)]
 pub struct ItemVideo {
     pub item_id: u64, // String
     pub video_id: u64, // String
@@ -209,7 +209,22 @@ pub struct ItemVideo {
     pub height: u16, // String
     pub length: usize, // String
     pub vid: String,
-    //pub type: u16, // String
+    pub vtype: u16,
+}
+
+impl Decodable for ItemVideo {
+    fn decode<D: Decoder>(d: &mut D) -> Result<ItemVideo, D::Error> {
+        d.read_struct("ItemVideo", 0, |d| Ok(ItemVideo {
+            item_id: try!(d.read_struct_field("item_id", 0, |d| d.read_u64())),
+            video_id: try!(d.read_struct_field("video_id", 1, |d| d.read_u64())),
+            src: try!(d.read_struct_field("src", 2, Decodable::decode)),
+            width: try!(d.read_struct_field("width", 3, |d| d.read_u16())),
+            height: try!(d.read_struct_field("height", 4, |d| d.read_u16())),
+            length: try!(d.read_struct_field("length", 5, |d| d.read_usize())),
+            vid: try!(d.read_struct_field("vid", 6, |d| d.read_str())),
+            vtype: try!(d.read_struct_field("type", 7, |d| d.read_u16())),
+        }))
+    }
 }
 
 #[derive(Show, PartialEq, Copy)]
