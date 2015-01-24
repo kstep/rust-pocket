@@ -19,6 +19,7 @@ use rustc_serialize::{json, Decodable, Encodable, Decoder, Encoder};
 use std::error::{FromError, Error};
 use std::old_io::IoError;
 use std::collections::BTreeMap;
+use std::result::Result;
 use time::Timespec;
 
 #[derive(Debug)]
@@ -496,9 +497,8 @@ impl<'a> PocketGetRequest<'a> {
 
 impl<'a> Encodable for PocketGetRequest<'a> {
     fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
-        e.emit_struct("PocketGetRequest", 0, |e|
-            e.emit_struct_field("consumer_key", 0, |e| e.emit_str(&*self.pocket.consumer_key)).and_then(|_|
-            e.emit_struct_field("access_token", 1, |e| e.emit_str(self.pocket.access_token.as_ref().map(|v| &**v).unwrap()))).and_then(|_|
+        e.emit_struct("PocketGetRequest", 13, |e|
+            self.pocket.encode(e).and_then(|_|
 
             e.emit_struct_field("search", 2, |e| e.emit_option(|e| self.search.map(|v|
                 e.emit_option_some(|e| e.emit_str(v))).unwrap_or_else(|| e.emit_option_none())
@@ -750,7 +750,6 @@ impl Decodable for PocketItem {
     }
 }
 
-#[derive(RustcEncodable)]
 struct PocketAddAction<'a> {
     item_id: Option<u64>,
     ref_id: Option<&'a str>,
@@ -760,57 +759,84 @@ struct PocketAddAction<'a> {
     url: Option<&'a Url>
 }
 
-#[derive(RustcEncodable)]
+impl<'a> PocketAction for PocketAddAction<'a> {
+    fn name(&self) -> &'static str { "add" }
+}
+
 struct PocketArchiveAction {
     item_id: u64,
     time: Option<u64>,
 }
 
-#[derive(RustcEncodable)]
+impl PocketAction for PocketArchiveAction {
+    fn name(&self) -> &'static str { "archive" }
+}
+
 struct PocketReaddAction {
     item_id: u64,
     time: Option<u64>,
 }
 
-#[derive(RustcEncodable)]
+impl PocketAction for PocketReaddAction {
+    fn name(&self) -> &'static str { "readd" }
+}
+
 struct PocketFavoriteAction {
     item_id: u64,
     time: Option<u64>,
 }
 
-#[derive(RustcEncodable)]
+impl PocketAction for PocketFavoriteAction {
+    fn name(&self) -> &'static str { "favorite" }
+}
+
 struct PocketUnfavoriteAction {
     item_id: u64,
     time: Option<u64>,
 }
 
-#[derive(RustcEncodable)]
+impl PocketAction for PocketUnfavoriteAction {
+    fn name(&self) -> &'static str { "unfavorite" }
+}
+
 struct PocketDeleteAction {
     item_id: u64,
     time: Option<u64>,
 }
 
-#[derive(RustcEncodable)]
+impl PocketAction for PocketDeleteAction {
+    fn name(&self) -> &'static str { "delete" }
+}
+
 struct PocketTagsAddAction<'a> {
     item_id: u64,
     tags: &'a str,
     time: Option<u64>,
 }
 
-#[derive(RustcEncodable)]
+impl<'a> PocketAction for PocketTagsAddAction<'a> {
+    fn name(&self) -> &'static str { "tags_add" }
+}
+
 struct PocketTagsReplaceAction<'a> {
     item_id: u64,
     tags: &'a str,
     time: Option<u64>,
 }
 
-#[derive(RustcEncodable)]
+impl<'a> PocketAction for PocketTagsReplaceAction<'a> {
+    fn name(&self) -> &'static str { "tags_replace" }
+}
+
 struct PocketTagsClearAction {
     item_id: u64,
     time: Option<u64>,
 }
 
-#[derive(RustcEncodable)]
+impl PocketAction for PocketTagsClearAction {
+    fn name(&self) -> &'static str { "tags_clear" }
+}
+
 struct PocketTagRenameAction<'a> {
     item_id: u64,
     old_tag: &'a str,
@@ -818,15 +844,46 @@ struct PocketTagRenameAction<'a> {
     time: Option<u64>,
 }
 
-trait PocketAction : Encodable {
-    fn name(marker: Option<Self>) -> &'static str;
+impl<'a> PocketAction for PocketTagRenameAction<'a> {
+    fn name(&self) -> &'static str { "tag_rename" }
+}
+
+trait PocketAction {
+    fn name(&self) -> &'static str;
+    // FIXME
+    fn encode(&self, e: &mut Self::Enc) -> Result<(), Self::EncError> {
+        Ok(())
+    }
 }
 
 #[derive(RustcEncodable)]
 struct PocketSendRequest<'a> {
-    consumer_key: &'a str,
-    access_token: &'a str,
-    //actions: &'a [&'a PocketAction]
+    pocket: &'a mut Pocket<'a>,
+    actions: Vec<&'a (PocketAction + 'a)>
+}
+
+impl<'a> Encodable for Vec<&'a (PocketAction + 'a)> {
+    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
+        e.emit_seq(self.len(), |e| {
+            self.iter()
+                .enumerate()
+                .map(|(idx, &action)| e.emit_seq_elt(idx, |e| {
+                    e.emit_struct("PocketAction", 0, |e| {
+                        e.emit_struct_field("action", 0, |e| e.emit_str(action.name())).and_then(|_| action.encode(e))
+                    })
+                }))
+                .skip_while(Result::is_ok)
+                .next()
+                .unwrap_or(Ok(()))
+        })
+    }
+}
+
+impl<'a> Encodable for Pocket<'a> {
+    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
+        e.emit_struct_field("consumer_key", 0, |e| e.emit_str(&*self.consumer_key)).and_then(|_|
+        e.emit_struct_field("access_token", 1, |e| e.emit_str(self.access_token.as_ref().map(|v| &**v).unwrap())))
+    }
 }
 
 #[derive(RustcDecodable)]
@@ -916,4 +973,24 @@ impl<'a> Pocket<'a> {
     pub fn filter(&'a mut self) -> PocketGetRequest<'a> {
         PocketGetRequest::new(self)
     }
+}
+
+#[test]
+fn test_actions_serialize() {
+    let pocket = Pocket::new("abc", Some("def"));
+    let add_action = PocketAddAction {
+        item_id: None,
+        ref_id: None,
+        tags: None,
+        time: None,
+        title: None,
+        url: None
+    };
+    let actions = PocketSendRequest {
+        pocket: &mut pocket,
+        actions: vec![&add_action]
+    };
+    assert_eq!(&*json::encode(&actions).unwrap(), "{
+
+    }");
 }
