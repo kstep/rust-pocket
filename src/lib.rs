@@ -12,7 +12,7 @@ use hyper::header::{Header, HeaderFormat, ContentType};
 use hyper::client::{Client, IntoUrl};
 use hyper::net::HttpConnector;
 use hyper::HttpError;
-use hyper::header::shared::util::from_one_raw_str;
+use hyper::header::parsing::from_one_raw_str;
 use url::Url;
 use mime::Mime;
 use rustc_serialize::{json, Decodable, Encodable, Decoder, Encoder};
@@ -21,14 +21,21 @@ use std::io::IoError;
 use std::collections::BTreeMap;
 use time::Timespec;
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum PocketError {
     Http(HttpError),
     Json(json::DecoderError),
+    Format(json::EncoderError),
     Proto(u16, String)
 }
 
 pub type PocketResult<T> = Result<T, PocketError>;
+
+impl FromError<json::EncoderError> for PocketError {
+    fn from_error(err: json::EncoderError) -> PocketError {
+        PocketError::Format(err)
+    }
+}
 
 impl FromError<json::DecoderError> for PocketError {
     fn from_error(err: json::DecoderError) -> PocketError {
@@ -53,15 +60,8 @@ impl Error for PocketError {
         match *self {
             PocketError::Http(ref e) => e.description(),
             PocketError::Json(ref e) => e.description(),
+            PocketError::Format(ref e) => e.description(),
             PocketError::Proto(..) => "protocol error"
-        }
-    }
-
-    fn detail(&self) -> Option<String> {
-        match *self {
-            PocketError::Http(ref e) => e.detail(),
-            PocketError::Json(ref e) => e.detail(),
-            PocketError::Proto(ref code, ref msg) => Some(format!("{} (code {})", msg, code))
         }
     }
 
@@ -69,7 +69,19 @@ impl Error for PocketError {
         match *self {
             PocketError::Http(ref e) => Some(e),
             PocketError::Json(ref e) => Some(e),
+            PocketError::Format(ref e) => Some(e),
             PocketError::Proto(..) => None
+        }
+    }
+}
+
+impl std::fmt::Display for PocketError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        match *self {
+            PocketError::Http(ref e) => e.fmt(fmt),
+            PocketError::Json(ref e) => e.fmt(fmt),
+            PocketError::Format(ref e) => e.fmt(fmt),
+            PocketError::Proto(ref code, ref msg) => fmt.write_str(&*format!("{} (code {})", msg, code))
         }
     }
 }
@@ -91,8 +103,7 @@ impl std::ops::DerefMut for XAccept {
 }
 
 impl Header for XAccept {
-    #[allow(unused_variables)]
-    fn header_name(marker: Option<Self>) -> &'static str {
+    fn header_name() -> &'static str {
         "X-Accept"
     }
 
@@ -103,7 +114,7 @@ impl Header for XAccept {
 
 impl HeaderFormat for XAccept {
     fn fmt_header(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        std::fmt::String::fmt(&self.0, fmt)
+        std::fmt::Display::fmt(&self.0, fmt)
     }
 }
 
@@ -113,8 +124,7 @@ struct XError(String);
 struct XErrorCode(u16);
 
 impl Header for XError {
-    #[allow(unused_variables)]
-    fn header_name(marker: Option<Self>) -> &'static str {
+    fn header_name() -> &'static str {
         "X-Error"
     }
 
@@ -125,13 +135,12 @@ impl Header for XError {
 
 impl HeaderFormat for XError {
     fn fmt_header(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        std::fmt::String::fmt(&self.0, fmt)
+        std::fmt::Display::fmt(&self.0, fmt)
     }
 }
 
 impl Header for XErrorCode {
-    #[allow(unused_variables)]
-    fn header_name(marker: Option<Self>) -> &'static str {
+    fn header_name() -> &'static str {
         "X-Error-Code"
     }
 
@@ -142,7 +151,7 @@ impl Header for XErrorCode {
 
 impl HeaderFormat for XErrorCode {
     fn fmt_header(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        std::fmt::String::fmt(&self.0, fmt)
+        std::fmt::Display::fmt(&self.0, fmt)
     }
 }
 
@@ -189,7 +198,7 @@ struct PocketAddRequest<'a> {
 }
 
 
-#[derive(RustcDecodable, Show, PartialEq)]
+#[derive(RustcDecodable, Debug, PartialEq)]
 pub struct ItemImage {
     pub item_id: u64, // String
     pub image_id: u64, // String
@@ -200,7 +209,7 @@ pub struct ItemImage {
     pub credit: String,
 }
 
-#[derive(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ItemVideo {
     pub item_id: u64, // String
     pub video_id: u64, // String
@@ -227,7 +236,7 @@ impl Decodable for ItemVideo {
     }
 }
 
-#[derive(Show, PartialEq, Copy)]
+#[derive(Debug, PartialEq, Copy)]
 pub enum PocketItemHas {
     No = 0,
     Yes = 1,
@@ -245,7 +254,7 @@ impl Decodable for PocketItemHas {
     }
 }
 
-#[derive(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct PocketAddedItem {
     pub item_id: u64, // String
     pub extended_item_id: u64, // String
@@ -339,8 +348,7 @@ struct PocketAddResponse {
 }
 
 pub struct PocketGetRequest<'a> {
-    consumer_key: String,
-    access_token: String,
+    pocket: &'a mut Pocket<'a>,
 
     search: Option<&'a str>,
     domain: Option<&'a str>,
@@ -358,10 +366,9 @@ pub struct PocketGetRequest<'a> {
 }
 
 impl<'a> PocketGetRequest<'a> {
-    fn new<'b>(consumer_key: &'b str, access_token: &'b str) -> PocketGetRequest<'a> {
+    fn new(pocket: &'a mut Pocket<'a>) -> PocketGetRequest<'a> {
         PocketGetRequest {
-            consumer_key: consumer_key.to_string(),
-            access_token: access_token.to_string(),
+            pocket: pocket,
             search: None,
             domain: None,
             tag: None,
@@ -478,13 +485,20 @@ impl<'a> PocketGetRequest<'a> {
     pub fn slice(self, offset: usize, count: usize) -> PocketGetRequest<'a> {
         self.offset(offset).count(count)
     }
+
+    pub fn get(self) -> PocketResult<Vec<PocketItem>> {
+        let request = try!(json::encode(&self));
+
+        self.pocket.request("https://getpocket.com/v3/get", &*request)
+            .map(|v: PocketGetResponse| v.list)
+    }
 }
 
 impl<'a> Encodable for PocketGetRequest<'a> {
     fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
         e.emit_struct("PocketGetRequest", 0, |e|
-            e.emit_struct_field("consumer_key", 0, |e| e.emit_str(&*self.consumer_key)).and_then(|_|
-            e.emit_struct_field("access_token", 1, |e| e.emit_str(&*self.access_token))).and_then(|_|
+            e.emit_struct_field("consumer_key", 0, |e| e.emit_str(&*self.pocket.consumer_key)).and_then(|_|
+            e.emit_struct_field("access_token", 1, |e| e.emit_str(self.pocket.access_token.as_ref().map(|v| &**v).unwrap()))).and_then(|_|
 
             e.emit_struct_field("search", 2, |e| e.emit_option(|e| self.search.map(|v|
                 e.emit_option_some(|e| e.emit_str(v))).unwrap_or_else(|| e.emit_option_none())
@@ -532,7 +546,7 @@ impl<'a> Encodable for PocketGetRequest<'a> {
     }
 }
 
-#[derive(Show, Copy)]
+#[derive(Debug, Copy)]
 pub enum PocketGetDetail {
     Simple,
     Complete
@@ -546,7 +560,7 @@ impl Encodable for PocketGetDetail {
     }
 }
 
-#[derive(Show, Copy)]
+#[derive(Debug, Copy)]
 pub enum PocketGetSort {
     Newest,
     Oldest,
@@ -565,7 +579,7 @@ impl Encodable for PocketGetSort {
     }
 }
 
-#[derive(Show, Copy)]
+#[derive(Debug, Copy)]
 pub enum PocketGetState {
     Unread,
     Archive,
@@ -582,7 +596,7 @@ impl Encodable for PocketGetState {
     }
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum PocketGetTag<'a> {
     Untagged,
     Tagged(&'a str)
@@ -597,7 +611,7 @@ impl<'a> Encodable for PocketGetTag<'a> {
     }
 }
 
-#[derive(Show, Copy)]
+#[derive(Debug, Copy)]
 pub enum PocketGetType {
     Article,
     Video,
@@ -614,7 +628,7 @@ impl Encodable for PocketGetType {
     }
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 struct PocketGetResponse {
     list: Vec<PocketItem>, // must be Vec
     status: u16,
@@ -641,7 +655,7 @@ impl Decodable for PocketGetResponse {
     }
 }
 
-#[derive(Show, PartialEq, Copy)]
+#[derive(Debug, PartialEq, Copy)]
 pub enum PocketItemStatus {
     Normal = 0,
     Archived = 1,
@@ -660,7 +674,7 @@ impl Decodable for PocketItemStatus {
 }
 
 // See also PocketAddedItem
-#[derive(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct PocketItem {
     pub item_id: u64,
 
@@ -850,11 +864,11 @@ impl<'a> Pocket<'a> {
     }
 
     pub fn get_auth_url(&mut self) -> PocketResult<Url> {
-        let request = json::encode(&PocketOAuthRequest {
+        let request = try!(json::encode(&PocketOAuthRequest {
             consumer_key: &*self.consumer_key,
             redirect_uri: "rustapi:finishauth",
             state: None
-        });
+        }));
 
         self.request("https://getpocket.com/v3/oauth/request", &*request)
             .and_then(|&mut: r: PocketOAuthResponse| {
@@ -866,10 +880,10 @@ impl<'a> Pocket<'a> {
     }
 
     pub fn authorize(&mut self) -> PocketResult<String> {
-        let request = json::encode(&PocketAuthorizeRequest {
+        let request = try!(json::encode(&PocketAuthorizeRequest {
             consumer_key: &*self.consumer_key,
             code: self.code.as_ref().map(|v| &**v).unwrap()
-        });
+        }));
 
         match self.request("https://getpocket.com/v3/oauth/authorize", &*request)
         {
@@ -882,14 +896,14 @@ impl<'a> Pocket<'a> {
     }
 
     pub fn add<T: IntoUrl>(&mut self, url: T, title: Option<&str>, tags: Option<&str>, tweet_id: Option<&str>) -> PocketResult<PocketAddedItem> {
-        let request = json::encode(&PocketAddRequest {
+        let request = try!(json::encode(&PocketAddRequest {
             consumer_key: &*self.consumer_key,
             access_token: &**self.access_token.as_ref().unwrap(),
             url: &url.into_url().unwrap(),
             title: title.map(|v| v.clone()),
             tags: tags.map(|v| v.clone()),
             tweet_id: tweet_id.map(|v| v.clone())
-        });
+        }));
 
         self.request("https://getpocket.com/v3/add", &*request)
             .map(|v: PocketAddResponse| v.item)
@@ -899,14 +913,7 @@ impl<'a> Pocket<'a> {
         self.add(url, None, None, None)
     }
 
-    pub fn get(&mut self, filter: &PocketGetRequest) -> PocketResult<Vec<PocketItem>> {
-        let request = json::encode(&filter);
-
-        self.request("https://getpocket.com/v3/get", &*request)
-            .map(|v: PocketGetResponse| v.list)
-    }
-
-    pub fn filter<'s, 'b>(&'s self) -> PocketGetRequest<'b> {
-        PocketGetRequest::new(&*self.consumer_key, self.access_token.as_ref().map(|a| &**a).unwrap())
+    pub fn filter(&'a mut self) -> PocketGetRequest<'a> {
+        PocketGetRequest::new(self)
     }
 }
