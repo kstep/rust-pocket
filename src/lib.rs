@@ -1,4 +1,4 @@
-#![allow(unstable)]
+#![feature(collections, core, io)]
 
 extern crate hyper;
 extern crate "rustc-serialize" as rustc_serialize;
@@ -17,7 +17,7 @@ use url::Url;
 use mime::Mime;
 use rustc_serialize::{json, Decodable, Encodable, Decoder, Encoder};
 use std::error::{FromError, Error};
-use std::io::IoError;
+use std::old_io::IoError;
 use std::collections::BTreeMap;
 use time::Timespec;
 

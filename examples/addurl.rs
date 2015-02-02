@@ -1,8 +1,9 @@
+#![feature(io)]
 
 extern crate pocket;
 
 use pocket::Pocket;
-use std::io::stdio;
+use std::old_io::stdio;
 
 fn main() {
     let mut pocket = Pocket::new(&*option_env!("POCKET_CONSUMER_KEY").unwrap(), None);
