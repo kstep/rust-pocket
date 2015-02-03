@@ -1,4 +1,4 @@
-# rust-pocket
+# rust-pocket <img src="https://img.shields.io/travis/kstep/rust-pocket.png?style=flat-square" />
 [Pocket API](http://getpocket.com/developer/docs/overview) bindings (http://getpocket.com), WIP
 
 API is very easy, actually. The most complex code is for authorization.
