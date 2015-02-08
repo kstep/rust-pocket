@@ -928,7 +928,7 @@ impl<'a> Pocket<'a> {
         }));
 
         self.request("https://getpocket.com/v3/oauth/request", &*request)
-            .and_then(|&mut: r: PocketOAuthResponse| {
+            .and_then(|r: PocketOAuthResponse| {
                 let mut url = Url::parse("https://getpocket.com/auth/authorize").unwrap();
                 url.set_query_from_pairs(vec![("request_token", &*r.code), ("redirect_uri", "rustapi:finishauth")].into_iter());
                 self.code = Some(r.code);
