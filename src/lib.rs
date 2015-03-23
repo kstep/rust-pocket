@@ -1,4 +1,4 @@
-#![feature(core, io)]
+#![feature(core, collections)]
 
 extern crate hyper;
 extern crate "rustc-serialize" as rustc_serialize;
@@ -16,11 +16,42 @@ use hyper::header::parsing::from_one_raw_str;
 use url::Url;
 use mime::Mime;
 use rustc_serialize::{json, Decodable, Encodable, Decoder, Encoder};
+use rustc_serialize::json::{ToJson, Json};
 use std::error::{FromError, Error};
-use std::old_io::IoError;
+use std::io::Error as IoError;
+use std::io::Read;
 use std::collections::BTreeMap;
 use std::result::Result;
 use time::Timespec;
+
+pub trait PocketAction : ToJson {
+    fn name(&self) -> &'static str;
+}
+
+macro_rules! impl_item_pocket_action {
+    ($name:expr, $cls:ident) => {
+        pub struct $cls {
+            item_id: u64,
+            time: Option<u64>
+        }
+
+        impl PocketAction for $cls {
+            fn name(&self) -> &'static str { $name }
+        }
+
+        impl ToJson for $cls {
+            fn to_json(&self) -> Json {
+                let mut obj = BTreeMap::new();
+
+                obj.insert("name".to_string(), self.name().to_json());
+                obj.insert("item_id".to_string(), self.item_id.to_json());
+                obj.insert("time".to_string(), self.time.to_json());
+
+                Json::Object(obj)
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum PocketError {
@@ -87,7 +118,7 @@ impl std::fmt::Display for PocketError {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct XAccept(pub Mime);
 
 impl std::ops::Deref for XAccept {
@@ -119,9 +150,9 @@ impl HeaderFormat for XAccept {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct XError(String);
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct XErrorCode(u16);
 
 impl Header for XError {
@@ -164,32 +195,32 @@ pub struct Pocket<'a> {
 }
 
 #[derive(RustcEncodable)]
-struct PocketOAuthRequest<'a> {
+pub struct PocketOAuthRequest<'a> {
     consumer_key: &'a str,
     redirect_uri: &'a str,
     state: Option<&'a str>
 }
 
 #[derive(RustcDecodable)]
-struct PocketOAuthResponse {
+pub struct PocketOAuthResponse {
     code: String,
     state: Option<String>
 }
 
 #[derive(RustcEncodable)]
-struct PocketAuthorizeRequest<'a> {
+pub struct PocketAuthorizeRequest<'a> {
     consumer_key: &'a str,
     code: &'a str
 }
 
 #[derive(RustcDecodable)]
-struct PocketAuthorizeResponse {
+pub struct PocketAuthorizeResponse {
     access_token: String,
     username: String
 }
 
 #[derive(RustcEncodable)]
-struct PocketAddRequest<'a> {
+pub struct PocketAddRequest<'a> {
     consumer_key: &'a str,
     access_token: &'a str,
     url: &'a Url,
@@ -333,17 +364,17 @@ impl Decodable for PocketAddedItem {
             has_video: try!(d.read_struct_field("has_video", 25, Decodable::decode)),
 
             videos: try!(d.read_struct_field("videos", 26, |d| d.read_map(|d, s|
-                Ok(range(0, s).flat_map(|i| d.read_map_elt_key(i, |d| d.read_str()).and_then(|_| d.read_map_elt_val(i, Decodable::decode)).into_iter()).collect())
+                Ok((0..s).flat_map(|i| d.read_map_elt_key(i, |d| d.read_str()).and_then(|_| d.read_map_elt_val(i, Decodable::decode)).into_iter()).collect())
             ))),
             images: try!(d.read_struct_field("images", 27, |d| d.read_map(|d, s|
-                Ok(range(0, s).flat_map(|i| d.read_map_elt_key(i, |d| d.read_str()).and_then(|_| d.read_map_elt_val(i, Decodable::decode)).into_iter()).collect())
+                Ok((0..s).flat_map(|i| d.read_map_elt_key(i, |d| d.read_str()).and_then(|_| d.read_map_elt_val(i, Decodable::decode)).into_iter()).collect())
             )))
         }))
     }
 }
 
 #[derive(RustcDecodable)]
-struct PocketAddResponse {
+pub struct PocketAddResponse {
     item: PocketAddedItem,
     status: u16
 }
@@ -488,61 +519,30 @@ impl<'a> PocketGetRequest<'a> {
     }
 
     pub fn get(self) -> PocketResult<Vec<PocketItem>> {
-        let request = try!(json::encode(&self));
+        let request = self.to_json().to_string();
 
         self.pocket.request("https://getpocket.com/v3/get", &*request)
             .map(|v: PocketGetResponse| v.list)
     }
 }
 
-impl<'a> Encodable for PocketGetRequest<'a> {
-    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
-        e.emit_struct("PocketGetRequest", 13, |e|
-            self.pocket.encode(e).and_then(|_|
+impl<'a> ToJson for PocketGetRequest<'a> {
+    fn to_json(&self) -> Json {
+        let mut obj = BTreeMap::new();
 
-            e.emit_struct_field("search", 2, |e| e.emit_option(|e| self.search.map(|v|
-                e.emit_option_some(|e| e.emit_str(v))).unwrap_or_else(|| e.emit_option_none())
-            ))).and_then(|_|
-            e.emit_struct_field("domain", 3, |e| e.emit_option(|e| self.domain.map(|v|
-                e.emit_option_some(|e| e.emit_str(v))).unwrap_or_else(|| e.emit_option_none())
-            ))).and_then(|_|
+        obj.insert("search".to_string(), self.search.map(String::from_str).to_json());
+        obj.insert("domain".to_string(), self.domain.map(String::from_str).to_json());
+        obj.insert("tag".to_string(), self.tag.to_json());
+        obj.insert("state".to_string(), self.state.to_json());
+        obj.insert("contentType".to_string(), self.content_type.to_json());
+        obj.insert("detailType".to_string(), self.detail_type.to_json());
+        obj.insert("favorite".to_string(), self.favorite.to_json());
+        obj.insert("since".to_string(), self.since.map(|v| v.sec as u64).to_json());
+        obj.insert("sort".to_string(), self.sort.to_json());
+        obj.insert("count".to_string(), self.count.to_json());
+        obj.insert("offset".to_string(), self.offset.to_json());
 
-            e.emit_struct_field("tag", 4, |e| e.emit_option(|e|
-                self.tag.as_ref().map(|v| e.emit_option_some(|e| v.encode(e)))
-                    .unwrap_or_else(|| e.emit_option_none())))).and_then(|_|
-
-            e.emit_struct_field("state", 5, |e| e.emit_option(|e|
-                self.state.as_ref().map(|v| e.emit_option_some(|e| v.encode(e)))
-                    .unwrap_or_else(|| e.emit_option_none())))).and_then(|_|
-
-            e.emit_struct_field("contentType", 6, |e| e.emit_option(|e|
-                self.content_type.as_ref().map(|v| e.emit_option_some(|e| v.encode(e)))
-                    .unwrap_or_else(|| e.emit_option_none())))).and_then(|_|
-
-            e.emit_struct_field("detailType", 7, |e| e.emit_option(|e|
-                self.detail_type.as_ref().map(|v| e.emit_option_some(|e| v.encode(e)))
-                    .unwrap_or_else(|| e.emit_option_none())))).and_then(|_|
-
-            e.emit_struct_field("favorite", 8, |e| e.emit_option(|e| self.favorite.map(|v|
-                e.emit_option_some(|e| e.emit_bool(v))).unwrap_or_else(|| e.emit_option_none())
-            ))).and_then(|_|
-
-            e.emit_struct_field("since", 9, |e| e.emit_option(|e| self.since.map(|v|
-                e.emit_option_some(|e| e.emit_u64(v.sec as u64))).unwrap_or_else(|| e.emit_option_none())
-            ))).and_then(|_|
-
-            e.emit_struct_field("sort", 10, |e| e.emit_option(|e|
-                self.sort.as_ref().map(|v| e.emit_option_some(|e| v.encode(e)))
-                    .unwrap_or_else(|| e.emit_option_none())))).and_then(|_|
-
-            e.emit_struct_field("count", 11, |e| e.emit_option(|e| self.count.map(|v|
-                e.emit_option_some(|e| e.emit_usize(v))).unwrap_or_else(|| e.emit_option_none())
-            ))).and_then(|_|
-
-            e.emit_struct_field("offset", 12, |e| e.emit_option(|e| self.offset.map(|v|
-                e.emit_option_some(|e| e.emit_usize(v))).unwrap_or_else(|| e.emit_option_none())
-            )))
-        )
+        Json::Object(obj)
     }
 }
 
@@ -551,12 +551,13 @@ pub enum PocketGetDetail {
     Simple,
     Complete
 }
-impl Encodable for PocketGetDetail {
-    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
-        match *self {
-            PocketGetDetail::Simple => e.emit_str("simple"),
-            PocketGetDetail::Complete => e.emit_str("complete"),
-        }
+
+impl ToJson for PocketGetDetail {
+    fn to_json(&self) -> Json {
+        Json::String(match *self {
+            PocketGetDetail::Simple => "simple",
+            PocketGetDetail::Complete => "complete",
+        }.to_string())
     }
 }
 
@@ -568,14 +569,14 @@ pub enum PocketGetSort {
     Site
 }
 
-impl Encodable for PocketGetSort {
-    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
-        match *self {
-            PocketGetSort::Newest => e.emit_str("newest"),
-            PocketGetSort::Oldest => e.emit_str("oldest"),
-            PocketGetSort::Title => e.emit_str("title"),
-            PocketGetSort::Site => e.emit_str("site"),
-        }
+impl ToJson for PocketGetSort {
+    fn to_json(&self) -> Json {
+        Json::String(match *self {
+            PocketGetSort::Newest => "newest",
+            PocketGetSort::Oldest => "oldest",
+            PocketGetSort::Title => "title",
+            PocketGetSort::Site => "site"
+        }.to_string())
     }
 }
 
@@ -586,13 +587,13 @@ pub enum PocketGetState {
     All
 }
 
-impl Encodable for PocketGetState {
-    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
-        match *self {
-            PocketGetState::Unread => e.emit_str("unread"),
-            PocketGetState::Archive => e.emit_str("archive"),
-            PocketGetState::All => e.emit_str("all"),
-        }
+impl ToJson for PocketGetState {
+    fn to_json(&self) -> Json {
+        Json::String(match *self {
+            PocketGetState::Unread => "unread",
+            PocketGetState::Archive => "archive",
+            PocketGetState::All => "all"
+        }.to_string())
     }
 }
 
@@ -602,11 +603,11 @@ pub enum PocketGetTag<'a> {
     Tagged(&'a str)
 }
 
-impl<'a> Encodable for PocketGetTag<'a> {
-    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
+impl<'a> ToJson for PocketGetTag<'a> {
+    fn to_json(&self) -> Json {
         match *self {
-            PocketGetTag::Untagged => e.emit_str("_untagged_"),
-            PocketGetTag::Tagged(ref s) => e.emit_str(&**s),
+            PocketGetTag::Untagged => Json::String("_untagged_".to_string()),
+            PocketGetTag::Tagged(ref s) => Json::String(s.to_string())
         }
     }
 }
@@ -618,18 +619,18 @@ pub enum PocketGetType {
     Image
 }
 
-impl Encodable for PocketGetType {
-    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
-        match *self {
-            PocketGetType::Article => e.emit_str("article"),
-            PocketGetType::Video => e.emit_str("video"),
-            PocketGetType::Image => e.emit_str("image"),
-        }
+impl ToJson for PocketGetType {
+    fn to_json(&self) -> Json {
+        Json::String(match *self {
+            PocketGetType::Article => "article",
+            PocketGetType::Video => "video",
+            PocketGetType::Image => "image",
+        }.to_string())
     }
 }
 
 #[derive(Debug)]
-struct PocketGetResponse {
+pub struct PocketGetResponse {
     list: Vec<PocketItem>, // must be Vec
     status: u16,
     complete: bool, // must be bool
@@ -642,7 +643,7 @@ impl Decodable for PocketGetResponse {
     fn decode<D: Decoder>(d: &mut D) -> Result<PocketGetResponse, D::Error> {
         d.read_struct("PocketGetResponse", 5, |d| Ok(PocketGetResponse {
             list: try!(d.read_struct_field("list", 0, |d| d.read_map(|d, s|
-                Ok(range(0, s).flat_map(|i|
+                Ok((0..s).flat_map(|i|
                     d.read_map_elt_key(i, |d| d.read_str()).and_then(|_|
                     d.read_map_elt_val(i, Decodable::decode)).into_iter())
                 .collect())
@@ -737,12 +738,12 @@ impl Decodable for PocketItem {
             status: try!(d.read_struct_field("status", 18, Decodable::decode)),
 
             videos: try!(d.read_struct_field("videos", 19, |d| d.read_option(|d, b| if b {
-                d.read_map(|d, s| Ok(range(0, s).flat_map(|i| d.read_map_elt_val(i, Decodable::decode).into_iter()).collect())).map(Some)
+                d.read_map(|d, s| Ok((0..s).flat_map(|i| d.read_map_elt_val(i, Decodable::decode).into_iter()).collect())).map(Some)
             } else {
                 Ok(None)
             }))),
             images: try!(d.read_struct_field("images", 20, |d| d.read_option(|d, b| if b {
-                d.read_map(|d, s| Ok(range(0, s).flat_map(|i| d.read_map_elt_val(i, Decodable::decode).into_iter()).collect())).map(Some)
+                d.read_map(|d, s| Ok((0..s).flat_map(|i| d.read_map_elt_val(i, Decodable::decode).into_iter()).collect())).map(Some)
             } else {
                 Ok(None)
             })))
@@ -750,7 +751,7 @@ impl Decodable for PocketItem {
     }
 }
 
-struct PocketAddAction<'a> {
+pub struct PocketAddAction<'a> {
     item_id: Option<u64>,
     ref_id: Option<&'a str>,
     tags: Option<&'a str>,
@@ -763,52 +764,34 @@ impl<'a> PocketAction for PocketAddAction<'a> {
     fn name(&self) -> &'static str { "add" }
 }
 
-struct PocketArchiveAction {
-    item_id: u64,
-    time: Option<u64>,
+impl<'a> ToJson for PocketAddAction<'a> {
+    fn to_json(&self) -> Json {
+        let mut obj = BTreeMap::new();
+
+        obj.insert("name".to_string(), self.name().to_json());
+        obj.insert("item_id".to_string(), self.item_id.to_json());
+        obj.insert("ref_id".to_string(), self.ref_id.map(String::from_str).to_json());
+        obj.insert("tags".to_string(), self.tags.map(String::from_str).to_json());
+        obj.insert("title".to_string(), self.title.map(String::from_str).to_json());
+
+        obj.insert("url".to_string(), match self.url {
+            Some(ref v) => Json::String(v.to_string()),
+            None => Json::Null
+        });
+
+        obj.insert("time".to_string(), self.time.to_json());
+
+        Json::Object(obj)
+    }
 }
 
-impl PocketAction for PocketArchiveAction {
-    fn name(&self) -> &'static str { "archive" }
-}
+impl_item_pocket_action!("archive", PocketArchiveAction);
+impl_item_pocket_action!("readd", PocketReaddAction);
+impl_item_pocket_action!("favorite", PocketFavoriteAction);
+impl_item_pocket_action!("unfavorite", PocketUnfavoriteAction);
+impl_item_pocket_action!("delete", PocketDeleteAction);
 
-struct PocketReaddAction {
-    item_id: u64,
-    time: Option<u64>,
-}
-
-impl PocketAction for PocketReaddAction {
-    fn name(&self) -> &'static str { "readd" }
-}
-
-struct PocketFavoriteAction {
-    item_id: u64,
-    time: Option<u64>,
-}
-
-impl PocketAction for PocketFavoriteAction {
-    fn name(&self) -> &'static str { "favorite" }
-}
-
-struct PocketUnfavoriteAction {
-    item_id: u64,
-    time: Option<u64>,
-}
-
-impl PocketAction for PocketUnfavoriteAction {
-    fn name(&self) -> &'static str { "unfavorite" }
-}
-
-struct PocketDeleteAction {
-    item_id: u64,
-    time: Option<u64>,
-}
-
-impl PocketAction for PocketDeleteAction {
-    fn name(&self) -> &'static str { "delete" }
-}
-
-struct PocketTagsAddAction<'a> {
+pub struct PocketTagsAddAction<'a> {
     item_id: u64,
     tags: &'a str,
     time: Option<u64>,
@@ -818,7 +801,19 @@ impl<'a> PocketAction for PocketTagsAddAction<'a> {
     fn name(&self) -> &'static str { "tags_add" }
 }
 
-struct PocketTagsReplaceAction<'a> {
+impl<'a> ToJson for PocketTagsAddAction<'a> {
+    fn to_json(&self) -> Json {
+        let mut obj = BTreeMap::new();
+
+        obj.insert("name".to_string(), self.name().to_json());
+        obj.insert("tags".to_string(), self.tags.to_json());
+        obj.insert("time".to_string(), self.time.to_json());
+
+        Json::Object(obj)
+    }
+}
+
+pub struct PocketTagsReplaceAction<'a> {
     item_id: u64,
     tags: &'a str,
     time: Option<u64>,
@@ -828,16 +823,22 @@ impl<'a> PocketAction for PocketTagsReplaceAction<'a> {
     fn name(&self) -> &'static str { "tags_replace" }
 }
 
-struct PocketTagsClearAction {
-    item_id: u64,
-    time: Option<u64>,
+impl<'a> ToJson for PocketTagsReplaceAction<'a> {
+    fn to_json(&self) -> Json {
+        let mut obj = BTreeMap::new();
+        obj.insert("name".to_string(), Json::String(self.name().to_string()));
+        obj.insert("item_id".to_string(), Json::U64(self.item_id));
+        obj.insert("tags".to_string(), Json::String(self.tags.to_string()));
+        if let Some(time) = self.time {
+            obj.insert("time".to_string(), Json::U64(time));
+        }
+        Json::Object(obj)
+    }
 }
 
-impl PocketAction for PocketTagsClearAction {
-    fn name(&self) -> &'static str { "tags_clear" }
-}
+impl_item_pocket_action!("tags_clear", PocketTagsClearAction);
 
-struct PocketTagRenameAction<'a> {
+pub struct PocketTagRenameAction<'a> {
     item_id: u64,
     old_tag: &'a str,
     new_tag: &'a str,
@@ -848,46 +849,36 @@ impl<'a> PocketAction for PocketTagRenameAction<'a> {
     fn name(&self) -> &'static str { "tag_rename" }
 }
 
-trait PocketAction {
-    fn name(&self) -> &'static str;
-    // FIXME
-    fn encode(&self, e: &mut Self::Enc) -> Result<(), Self::EncError> {
-        Ok(())
+impl<'a> ToJson for PocketTagRenameAction<'a> {
+    fn to_json(&self) -> Json {
+        let mut obj = BTreeMap::new();
+        obj.insert("name".to_string(), Json::String(self.name().to_string()));
+        obj.insert("item_id".to_string(), Json::U64(self.item_id));
+        obj.insert("old_tag".to_string(), Json::String(self.old_tag.to_string()));
+        obj.insert("new_tag".to_string(), Json::String(self.new_tag.to_string()));
+        obj.insert("time".to_string(), self.time.to_json());
+        Json::Object(obj)
     }
 }
 
-#[derive(RustcEncodable)]
-struct PocketSendRequest<'a> {
-    pocket: &'a mut Pocket<'a>,
-    actions: Vec<&'a (PocketAction + 'a)>
+pub struct PocketSendRequest<'a, 'b> {
+    pocket: &'b mut Pocket<'b>,
+    actions: &'a [&'a PocketAction]
 }
 
-impl<'a> Encodable for Vec<&'a (PocketAction + 'a)> {
+impl<'a, 'b> Encodable for PocketSendRequest<'a, 'b> {
     fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
-        e.emit_seq(self.len(), |e| {
-            self.iter()
-                .enumerate()
-                .map(|(idx, &action)| e.emit_seq_elt(idx, |e| {
-                    e.emit_struct("PocketAction", 0, |e| {
-                        e.emit_struct_field("action", 0, |e| e.emit_str(action.name())).and_then(|_| action.encode(e))
-                    })
-                }))
-                .skip_while(Result::is_ok)
-                .next()
-                .unwrap_or(Ok(()))
-        })
-    }
-}
 
-impl<'a> Encodable for Pocket<'a> {
-    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
-        e.emit_struct_field("consumer_key", 0, |e| e.emit_str(&*self.consumer_key)).and_then(|_|
-        e.emit_struct_field("access_token", 1, |e| e.emit_str(self.access_token.as_ref().map(|v| &**v).unwrap())))
+        let mut obj = BTreeMap::new();
+        obj.insert("consumer_key".to_string(), self.pocket.consumer_key.to_json());
+        obj.insert("access_token".to_string(), self.pocket.access_token.as_ref().map(|v| v.to_json()).unwrap());
+        obj.insert("actions".to_string(), Json::Array(self.actions.iter().map(|e| e.to_json()).collect()));
+        Json::Object(obj)
     }
 }
 
 #[derive(RustcDecodable)]
-struct PocketSendResponse {
+pub struct PocketSendResponse {
     status: u16,
     action_results: Vec<bool>
 }
@@ -914,8 +905,12 @@ impl<'a> Pocket<'a> {
             .body(data)
             .send().map_err(FromError::from_error)
             .and_then(|mut r| match r.headers.get::<XErrorCode>().map(|v| v.0) {
-                None => r.read_to_string().map_err(FromError::from_error),
-                Some(code) => Err(PocketError::Proto(code, r.headers.get::<XError>().map(|v| &*v.0).unwrap_or("unknown protocol error").to_string())),
+                None => {
+                    let mut out = String::new();
+                    r.read_to_string(&mut out).map_err(FromError::from_error).map(|_| out)
+                },
+                Some(code) => Err(PocketError::Proto(code, r.headers.get::<XError>().map(|v| &*v.0)
+                                                     .unwrap_or("unknown protocol error").to_string())),
             })
             .and_then(|s| json::decode::<Resp>(&*s).map_err(FromError::from_error))
     }
@@ -977,7 +972,7 @@ impl<'a> Pocket<'a> {
 
 #[test]
 fn test_actions_serialize() {
-    let pocket = Pocket::new("abc", Some("def"));
+    let mut pocket = Pocket::new("abc", Some("def"));
     let add_action = PocketAddAction {
         item_id: None,
         ref_id: None,
@@ -986,11 +981,12 @@ fn test_actions_serialize() {
         title: None,
         url: None
     };
+    let act: &PocketAction = &add_action;
     let actions = PocketSendRequest {
         pocket: &mut pocket,
-        actions: vec![&add_action]
+        actions: &[act]
     };
-    assert_eq!(&*json::encode(&actions).unwrap(), "{
+    assert_eq!(&*actions.to_json().to_string(), "{
 
     }");
 }
