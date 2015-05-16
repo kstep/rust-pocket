@@ -1,7 +1,5 @@
-#![feature(core, collections)]
-
 extern crate hyper;
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
 extern crate url;
 extern crate mime;
 extern crate time;
@@ -11,13 +9,14 @@ extern crate time;
 use hyper::header::{Header, HeaderFormat, ContentType};
 use hyper::client::{Client, IntoUrl};
 use hyper::net::HttpConnector;
-use hyper::HttpError;
 use hyper::header::parsing::from_one_raw_str;
+use hyper::error::Error as HttpError;
 use url::Url;
 use mime::Mime;
 use rustc_serialize::{json, Decodable, Encodable, Decoder, Encoder};
 use rustc_serialize::json::{ToJson, Json};
-use std::error::{FromError, Error};
+use std::error::Error;
+use std::convert::{From, Into};
 use std::io::Error as IoError;
 use std::io::Read;
 use std::collections::BTreeMap;
@@ -63,26 +62,26 @@ pub enum PocketError {
 
 pub type PocketResult<T> = Result<T, PocketError>;
 
-impl FromError<json::EncoderError> for PocketError {
-    fn from_error(err: json::EncoderError) -> PocketError {
+impl From<json::EncoderError> for PocketError {
+    fn from(err: json::EncoderError) -> PocketError {
         PocketError::Format(err)
     }
 }
 
-impl FromError<json::DecoderError> for PocketError {
-    fn from_error(err: json::DecoderError) -> PocketError {
+impl From<json::DecoderError> for PocketError {
+    fn from(err: json::DecoderError) -> PocketError {
         PocketError::Json(err)
     }
 }
 
-impl FromError<IoError> for PocketError {
-    fn from_error(err: IoError) -> PocketError {
-        PocketError::Http(FromError::from_error(err))
+impl From<IoError> for PocketError {
+    fn from(err: IoError) -> PocketError {
+        PocketError::Http(From::from(err))
     }
 }
 
-impl FromError<HttpError> for PocketError {
-    fn from_error(err: HttpError) -> PocketError {
+impl From<HttpError> for PocketError {
+    fn from(err: HttpError) -> PocketError {
         PocketError::Http(err)
     }
 }
@@ -187,11 +186,11 @@ impl HeaderFormat for XErrorCode {
     }
 }
 
-pub struct Pocket<'a> {
+pub struct Pocket {
     consumer_key: String,
     access_token: Option<String>,
     code: Option<String>,
-    client: Client<HttpConnector<'a>>
+    client: Client
 }
 
 #[derive(RustcEncodable)]
@@ -268,7 +267,7 @@ impl Decodable for ItemVideo {
     }
 }
 
-#[derive(Debug, PartialEq, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum PocketItemHas {
     No = 0,
     Yes = 1,
@@ -380,7 +379,7 @@ pub struct PocketAddResponse {
 }
 
 pub struct PocketGetRequest<'a> {
-    pocket: &'a mut Pocket<'a>,
+    pocket: &'a mut Pocket,
 
     search: Option<&'a str>,
     domain: Option<&'a str>,
@@ -398,7 +397,7 @@ pub struct PocketGetRequest<'a> {
 }
 
 impl<'a> PocketGetRequest<'a> {
-    fn new(pocket: &'a mut Pocket<'a>) -> PocketGetRequest<'a> {
+    fn new(pocket: &'a mut Pocket) -> PocketGetRequest<'a> {
         PocketGetRequest {
             pocket: pocket,
             search: None,
@@ -530,8 +529,8 @@ impl<'a> ToJson for PocketGetRequest<'a> {
     fn to_json(&self) -> Json {
         let mut obj = BTreeMap::new();
 
-        obj.insert("search".to_string(), self.search.map(String::from_str).to_json());
-        obj.insert("domain".to_string(), self.domain.map(String::from_str).to_json());
+        obj.insert("search".to_string(), self.search.map(From::from).to_json());
+        obj.insert("domain".to_string(), self.domain.map(From::from).to_json());
         obj.insert("tag".to_string(), self.tag.to_json());
         obj.insert("state".to_string(), self.state.to_json());
         obj.insert("contentType".to_string(), self.content_type.to_json());
@@ -546,7 +545,7 @@ impl<'a> ToJson for PocketGetRequest<'a> {
     }
 }
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum PocketGetDetail {
     Simple,
     Complete
@@ -561,7 +560,7 @@ impl ToJson for PocketGetDetail {
     }
 }
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum PocketGetSort {
     Newest,
     Oldest,
@@ -580,7 +579,7 @@ impl ToJson for PocketGetSort {
     }
 }
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum PocketGetState {
     Unread,
     Archive,
@@ -612,7 +611,7 @@ impl<'a> ToJson for PocketGetTag<'a> {
     }
 }
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum PocketGetType {
     Article,
     Video,
@@ -656,7 +655,7 @@ impl Decodable for PocketGetResponse {
     }
 }
 
-#[derive(Debug, PartialEq, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum PocketItemStatus {
     Normal = 0,
     Archived = 1,
@@ -770,9 +769,9 @@ impl<'a> ToJson for PocketAddAction<'a> {
 
         obj.insert("name".to_string(), self.name().to_json());
         obj.insert("item_id".to_string(), self.item_id.to_json());
-        obj.insert("ref_id".to_string(), self.ref_id.map(String::from_str).to_json());
-        obj.insert("tags".to_string(), self.tags.map(String::from_str).to_json());
-        obj.insert("title".to_string(), self.title.map(String::from_str).to_json());
+        obj.insert("ref_id".to_string(), self.ref_id.map(From::from).to_json());
+        obj.insert("tags".to_string(), self.tags.map(From::from).to_json());
+        obj.insert("title".to_string(), self.title.map(From::from).to_json());
 
         obj.insert("url".to_string(), match self.url {
             Some(ref v) => Json::String(v.to_string()),
@@ -862,13 +861,12 @@ impl<'a> ToJson for PocketTagRenameAction<'a> {
 }
 
 pub struct PocketSendRequest<'a, 'b> {
-    pocket: &'b mut Pocket<'b>,
+    pocket: &'b mut Pocket,
     actions: &'a [&'a PocketAction]
 }
 
-impl<'a, 'b> Encodable for PocketSendRequest<'a, 'b> {
-    fn encode<E: Encoder>(&self, e: &mut E) -> Result<(), E::Error> {
-
+impl<'a, 'b> ToJson for PocketSendRequest<'a, 'b> {
+    fn to_json(&self) -> Json {
         let mut obj = BTreeMap::new();
         obj.insert("consumer_key".to_string(), self.pocket.consumer_key.to_json());
         obj.insert("access_token".to_string(), self.pocket.access_token.as_ref().map(|v| v.to_json()).unwrap());
@@ -883,8 +881,8 @@ pub struct PocketSendResponse {
     action_results: Vec<bool>
 }
 
-impl<'a> Pocket<'a> {
-    pub fn new(consumer_key: &str, access_token: Option<&str>) -> Pocket<'a> {
+impl Pocket {
+    pub fn new(consumer_key: &str, access_token: Option<&str>) -> Pocket {
         Pocket {
             consumer_key: consumer_key.to_string(),
             access_token: access_token.map(|v| v.to_string()),
@@ -903,16 +901,16 @@ impl<'a> Pocket<'a> {
             .header(XAccept(app_json.clone()))
             .header(ContentType(app_json.clone()))
             .body(data)
-            .send().map_err(FromError::from_error)
+            .send().map_err(From::from)
             .and_then(|mut r| match r.headers.get::<XErrorCode>().map(|v| v.0) {
                 None => {
                     let mut out = String::new();
-                    r.read_to_string(&mut out).map_err(FromError::from_error).map(|_| out)
+                    r.read_to_string(&mut out).map_err(From::from).map(|_| out)
                 },
                 Some(code) => Err(PocketError::Proto(code, r.headers.get::<XError>().map(|v| &*v.0)
                                                      .unwrap_or("unknown protocol error").to_string())),
             })
-            .and_then(|s| json::decode::<Resp>(&*s).map_err(FromError::from_error))
+            .and_then(|s| json::decode::<Resp>(&*s).map_err(From::from))
     }
 
     pub fn get_auth_url(&mut self) -> PocketResult<Url> {
@@ -965,7 +963,7 @@ impl<'a> Pocket<'a> {
         self.add(url, None, None, None)
     }
 
-    pub fn filter(&'a mut self) -> PocketGetRequest<'a> {
+    pub fn filter(&mut self) -> PocketGetRequest {
         PocketGetRequest::new(self)
     }
 }
