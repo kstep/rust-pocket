@@ -409,20 +409,22 @@ pub struct PocketGetRequest<'a> {
 
 impl<'a> Encodable for PocketGetRequest<'a> {
     fn encode<S: Encoder>(&self, e: &mut S) -> Result<(), S::Error> {
-        e.emit_struct("PocketGetRequest", 11, |e| {
-            e.emit_struct_field("search", 0, |e| self.search.encode(e)).and_then(|_|
-            e.emit_struct_field("domain", 1, |e| self.domain.encode(e))).and_then(|_|
+        e.emit_struct("PocketGetRequest", 13, |e| {
+            e.emit_struct_field("consumer_key", 0, |e| self.pocket.consumer_key.encode(e)).and_then(|_|
+            e.emit_struct_field("access_token", 1, |e| self.pocket.access_token.as_ref().unwrap().encode(e))).and_then(|_|
+            e.emit_struct_field("search", 2, |e| self.search.encode(e))).and_then(|_|
+            e.emit_struct_field("domain", 3, |e| self.domain.encode(e))).and_then(|_|
 
-            e.emit_struct_field("tag", 2, |e| self.tag.encode(e))).and_then(|_|
-            e.emit_struct_field("state", 3, |e| self.state.encode(e))).and_then(|_|
-            e.emit_struct_field("content_type", 4, |e| self.content_type.encode(e))).and_then(|_|
-            e.emit_struct_field("detail_type", 5, |e| self.detail_type.encode(e))).and_then(|_|
-            e.emit_struct_field("favorite", 6, |e| self.favorite.encode(e))).and_then(|_|
-            e.emit_struct_field("since", 7, |e| self.since.map(|v| v.sec).encode(e))).and_then(|_|
+            e.emit_struct_field("tag", 4, |e| self.tag.encode(e))).and_then(|_|
+            e.emit_struct_field("state", 5, |e| self.state.encode(e))).and_then(|_|
+            e.emit_struct_field("content_type", 6, |e| self.content_type.encode(e))).and_then(|_|
+            e.emit_struct_field("detail_type", 7, |e| self.detail_type.encode(e))).and_then(|_|
+            e.emit_struct_field("favorite", 8, |e| self.favorite.encode(e))).and_then(|_|
+            e.emit_struct_field("since", 9, |e| self.since.map(|v| v.sec).encode(e))).and_then(|_|
 
-            e.emit_struct_field("sort", 8, |e| self.sort.encode(e))).and_then(|_|
-            e.emit_struct_field("count", 9, |e| self.count.encode(e))).and_then(|_|
-            e.emit_struct_field("offset", 10, |e| self.offset.encode(e)))
+            e.emit_struct_field("sort", 10, |e| self.sort.encode(e))).and_then(|_|
+            e.emit_struct_field("count", 11, |e| self.count.encode(e))).and_then(|_|
+            e.emit_struct_field("offset", 12, |e| self.offset.encode(e)))
         })
     }
 }
