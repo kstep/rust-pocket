@@ -447,106 +447,106 @@ impl<'a> PocketGetRequest<'a> {
         }
     }
 
-    pub fn search(mut self, search: &'a str) -> PocketGetRequest<'a> {
+    pub fn search<'b>(&'b mut self, search: &'a str) -> &'b mut PocketGetRequest<'a> {
         self.search = Some(search);
         self
     }
 
-    pub fn domain(mut self, domain: &'a str) -> PocketGetRequest<'a> {
+    pub fn domain<'b>(&'b mut self, domain: &'a str) -> &'b mut PocketGetRequest<'a> {
         self.domain = Some(domain);
         self
     }
 
-    pub fn tag(mut self, tag: PocketGetTag<'a>) -> PocketGetRequest<'a> {
+    pub fn tag<'b>(&'b mut self, tag: PocketGetTag<'a>) -> &'b mut PocketGetRequest<'a> {
         self.tag = Some(tag);
         self
     }
 
-    pub fn state(mut self, state: PocketGetState) -> PocketGetRequest<'a> {
+    pub fn state<'b>(&'b mut self, state: PocketGetState) -> &'b mut PocketGetRequest<'a> {
         self.state = Some(state);
         self
     }
 
-    pub fn content_type(mut self, content_type: PocketGetType) -> PocketGetRequest<'a> {
+    pub fn content_type<'b>(&'b mut self, content_type: PocketGetType) -> &'b mut PocketGetRequest<'a> {
         self.content_type = Some(content_type);
         self
     }
 
-    pub fn detail_type(mut self, detail_type: PocketGetDetail) -> PocketGetRequest<'a> {
+    pub fn detail_type<'b>(&'b mut self, detail_type: PocketGetDetail) -> &'b mut PocketGetRequest<'a> {
         self.detail_type = Some(detail_type);
         self
     }
 
-    pub fn complete(self) -> PocketGetRequest<'a> {
+    pub fn complete<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.detail_type(PocketGetDetail::Complete)
     }
 
-    pub fn simple(self) -> PocketGetRequest<'a> {
+    pub fn simple<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.detail_type(PocketGetDetail::Simple)
     }
 
-    pub fn archived(self) -> PocketGetRequest<'a> {
+    pub fn archived<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.state(PocketGetState::Archive)
     }
 
-    pub fn unread(self) -> PocketGetRequest<'a> {
+    pub fn unread<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.state(PocketGetState::Unread)
     }
 
-    pub fn articles(self) -> PocketGetRequest<'a> {
+    pub fn articles<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.content_type(PocketGetType::Article)
     }
 
-    pub fn videos(self) -> PocketGetRequest<'a> {
+    pub fn videos<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.content_type(PocketGetType::Video)
     }
 
-    pub fn images(self) -> PocketGetRequest<'a> {
+    pub fn images<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.content_type(PocketGetType::Image)
     }
 
-    pub fn favorite(mut self, fav: bool) -> PocketGetRequest<'a> {
+    pub fn favorite<'b>(&'b mut self, fav: bool) -> &'b mut PocketGetRequest<'a> {
         self.favorite = Some(fav);
         self
     }
 
-    pub fn since(mut self, since: Timespec) -> PocketGetRequest<'a> {
+    pub fn since<'b>(&'b mut self, since: Timespec) -> &'b mut PocketGetRequest<'a> {
         self.since = Some(since);
         self
     }
 
-    pub fn sort(mut self, sort: PocketGetSort) -> PocketGetRequest<'a> {
+    pub fn sort<'b>(&'b mut self, sort: PocketGetSort) -> &'b mut PocketGetRequest<'a> {
         self.sort = Some(sort);
         self
     }
 
-    pub fn sort_by_newest(self) -> PocketGetRequest<'a> {
+    pub fn sort_by_newest<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.sort(PocketGetSort::Newest)
     }
 
-    pub fn sort_by_oldest(self) -> PocketGetRequest<'a> {
+    pub fn sort_by_oldest<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.sort(PocketGetSort::Oldest)
     }
 
-    pub fn sort_by_title(self) -> PocketGetRequest<'a> {
+    pub fn sort_by_title<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.sort(PocketGetSort::Title)
     }
 
-    pub fn sort_by_site(self) -> PocketGetRequest<'a> {
+    pub fn sort_by_site<'b>(&'b mut self) -> &'b mut PocketGetRequest<'a> {
         self.sort(PocketGetSort::Site)
     }
 
-    pub fn offset(mut self, offset: usize) -> PocketGetRequest<'a> {
+    pub fn offset<'b>(&'b mut self, offset: usize) -> &'b mut PocketGetRequest<'a> {
         self.offset = Some(offset);
         self
     }
 
-    pub fn count(mut self, count: usize) -> PocketGetRequest<'a> {
+    pub fn count<'b>(&'b mut self, count: usize) -> &'b mut PocketGetRequest<'a> {
         self.count = Some(count);
         self
     }
 
-    pub fn slice(self, offset: usize, count: usize) -> PocketGetRequest<'a> {
+    pub fn slice<'b>(&'b mut self, offset: usize, count: usize) -> &'b mut PocketGetRequest<'a> {
         self.offset(offset).count(count)
     }
 
