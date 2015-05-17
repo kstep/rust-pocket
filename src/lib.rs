@@ -373,11 +373,11 @@ impl Decodable for PocketAddedItem {
             has_image: try!(d.read_struct_field("has_image", 24, Decodable::decode)),
             has_video: try!(d.read_struct_field("has_video", 25, Decodable::decode)),
 
-            videos: try!(d.read_struct_field("videos", 26, |d| d.read_map(|d, s|
-                Ok((0..s).flat_map(|i| d.read_map_elt_key(i, |d| d.read_str()).and_then(|_| d.read_map_elt_val(i, Decodable::decode)).into_iter()).collect())
+            videos: try!(d.read_struct_field("videos", 26, |d| d.read_seq(|d, s|
+                Ok((0..s).flat_map(|i| d.read_seq_elt(i, Decodable::decode)).into_iter().collect())
             ))),
-            images: try!(d.read_struct_field("images", 27, |d| d.read_map(|d, s|
-                Ok((0..s).flat_map(|i| d.read_map_elt_key(i, |d| d.read_str()).and_then(|_| d.read_map_elt_val(i, Decodable::decode)).into_iter()).collect())
+            images: try!(d.read_struct_field("images", 27, |d| d.read_seq(|d, s|
+                Ok((0..s).flat_map(|i| d.read_seq_elt(i, Decodable::decode)).into_iter().collect())
             )))
         }))
     }
