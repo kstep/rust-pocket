@@ -149,7 +149,7 @@ impl Header for XAccept {
         "X-Accept"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> Option<XAccept> {
+    fn parse_header(raw: &[Vec<u8>]) -> Result<XAccept, HttpError> {
         from_one_raw_str(raw).map(|mime| XAccept(mime))
     }
 }
@@ -170,7 +170,7 @@ impl Header for XError {
         "X-Error"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> Option<XError> {
+    fn parse_header(raw: &[Vec<u8>]) -> Result<XError, HttpError> {
         from_one_raw_str(raw).map(|error| XError(error))
     }
 }
@@ -186,7 +186,7 @@ impl Header for XErrorCode {
         "X-Error-Code"
     }
 
-    fn parse_header(raw: &[Vec<u8>]) -> Option<XErrorCode> {
+    fn parse_header(raw: &[Vec<u8>]) -> Result<XErrorCode, HttpError> {
         from_one_raw_str(raw).map(|code| XErrorCode(code))
     }
 }
