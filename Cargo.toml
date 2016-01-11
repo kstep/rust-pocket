@@ -6,7 +6,7 @@ authors = ["Konstantin Stepanov <me@kstep.me>"]
 description = "Simple bindings for Pocket API (https://getpocket.com)"
 homepage = "https://github.com/kstep/rust-pocket"
 repository = "https://github.com/kstep/rust-pocket.git"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 hyper = "*"
