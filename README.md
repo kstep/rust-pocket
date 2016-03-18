@@ -53,16 +53,20 @@ let added_item = pocket.push("http://example.com", Some("Example title"), Some("
 To query your pocket, use `Pocket::filter()` method:
 
 ```rust
-let items = pocket.filter()
-    .complete() // complete data
-    .archived() // archived items only
-    .videos()   // videos only
-    .offset(10) // items 10-20
-    .count(10)
-    .sort_by_title() // sorted by title
-    .get(); // get items
+let items = {
+    let mut f = pocket.filter();
+    
+    f.complete() // complete data
+    f.archived() // archived items only
+    f.videos()   // videos only
+    f.offset(10) // items 10-20
+    f.count(10)
+    f.sort_by_title() // sorted by title
+    f.get(); // get items
+};
 
 // There are other methods, see `PocketGetRequest` struct for details
+...
 ```
 
 The API bindings will be improved with new methods and parameters. Keep tuned!
