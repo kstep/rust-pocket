@@ -9,11 +9,11 @@ repository = "https://github.com/kstep/rust-pocket.git"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-hyper = "*"
-url = "*"
-rustc-serialize = "*"
-mime = "*"
-time = "*"
+hyper = "0.7.2"
+url = "0.5"
+rustc-serialize = "0.3"
+mime = "0.1"
+time = "0.1"
 
 [dev-dependencies]
-log = "*"
+log = "0.3.5"
