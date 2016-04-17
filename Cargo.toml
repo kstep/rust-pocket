@@ -1,7 +1,7 @@
 [package]
 
 name = "pocket"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Konstantin Stepanov <me@kstep.me>"]
 description = "Simple bindings for Pocket API (https://getpocket.com)"
 homepage = "https://github.com/kstep/rust-pocket"
@@ -9,10 +9,10 @@ repository = "https://github.com/kstep/rust-pocket.git"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-hyper = "0.7.2"
+hyper = "0.8.1"
 url = "0.5"
 rustc-serialize = "0.3"
-mime = "0.1"
+mime = "0.2"
 time = "0.1"
 
 [dev-dependencies]
